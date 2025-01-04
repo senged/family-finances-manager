@@ -2,11 +2,12 @@
   "name": "family-finances-manager",
   "version": "1.0.0",
   "description": "",
-  "main": "main.js",
+  "main": "main.cjs",
   "scripts": {
-    "start": "npm run build && electron .",
-    "dev": "vite build --watch",
-    "build": "vite build"
+    "start": "electron main.cjs",
+    "dev": "vite",
+    "build": "vite build",
+    "dev:all": "concurrently \"npm run dev\" \"npm run start\""
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -16,7 +17,9 @@
     "electron": "^28.0.0",
     "electron-store": "^10.0.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

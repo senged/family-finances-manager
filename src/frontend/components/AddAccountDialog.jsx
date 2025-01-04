@@ -14,19 +14,45 @@ import {
   Box
 } from '@mui/material';
 
-function AddAccountDialog({ open, onClose, onAdd, existingAccounts, accountTypes = [] }) {
+function AddAccountDialog({ open, onClose, onAdd, existingAccounts, accountTypes, processors }) {
   const [name, setName] = useState('');
   const [type, setType] = useState('');
+  const [processor, setProcessor] = useState('');
   const [nameError, setNameError] = useState('');
 
-  // Reset form when dialog opens
   useEffect(() => {
     if (open) {
       setName('');
       setType('');
+      setProcessor('');
       setNameError('');
     }
   }, [open]);
+
+  const handleSubmit = () => {
+    const trimmedName = name.trim();
+    if (validateName(trimmedName) && type && processor) {
+      onAdd({
+        name: trimmedName,
+        type,
+        processorId: processor,
+        stats: {
+          lastImport: null,
+          transactionCount: 0,
+          dateRange: {
+            start: null,
+            end: null
+          }
+        },
+        settings: {
+          importPath: null,
+          columnMappings: null,
+          autoImport: false
+        }
+      });
+      onClose();
+    }
+  };
 
   const validateName = (value) => {
     const trimmedValue = value.trim();
@@ -45,17 +71,6 @@ function AddAccountDialog({ open, onClose, onAdd, existingAccounts, accountTypes
   const handleNameChange = (event) => {
     setName(event.target.value);
     validateName(event.target.value);
-  };
-
-  const handleSubmit = () => {
-    const trimmedName = name.trim();
-    if (validateName(trimmedName) && type) {
-      onAdd({
-        name: trimmedName,
-        type
-      });
-      onClose();
-    }
   };
 
   return (
@@ -79,7 +94,7 @@ function AddAccountDialog({ open, onClose, onAdd, existingAccounts, accountTypes
               onChange={(e) => setType(e.target.value)}
               label="Account Type"
             >
-              {Array.isArray(accountTypes) && accountTypes.map((type) => (
+              {accountTypes.map((type) => (
                 <MenuItem key={type} value={type}>
                   {type}
                 </MenuItem>
@@ -87,13 +102,28 @@ function AddAccountDialog({ open, onClose, onAdd, existingAccounts, accountTypes
             </Select>
             {!type && <FormHelperText>Please select an account type</FormHelperText>}
           </FormControl>
+          <FormControl fullWidth>
+            <InputLabel>Transaction Processor</InputLabel>
+            <Select
+              value={processor}
+              onChange={(e) => setProcessor(e.target.value)}
+              label="Transaction Processor"
+            >
+              {processors.map((proc) => (
+                <MenuItem key={proc.id} value={proc.id}>
+                  {proc.name}
+                </MenuItem>
+              ))}
+            </Select>
+            <FormHelperText>Select how to process account transactions</FormHelperText>
+          </FormControl>
         </Box>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button 
           onClick={handleSubmit}
-          disabled={!name.trim() || !type || !!nameError}
+          disabled={!name.trim() || !type || !processor || !!nameError}
           variant="contained"
         >
           Add Account

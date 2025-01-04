@@ -27,7 +27,6 @@ function Sidebar({ accounts, onAccountsChange }) {
       onAccountsChange(); // Refresh the accounts list
     } catch (error) {
       console.error('Error adding account:', error);
-      // TODO: Show error message to user
     }
   };
 
@@ -64,7 +63,7 @@ function Sidebar({ accounts, onAccountsChange }) {
                 <ListItem key={account.id} sx={{ pl: 4 }}>
                   <ListItemText 
                     primary={account.name}
-                    secondary={account.type}
+                    secondary={`${account.type} - ${account.processorId}`}
                   />
                 </ListItem>
               ))
@@ -77,8 +76,9 @@ function Sidebar({ accounts, onAccountsChange }) {
         open={isAddDialogOpen}
         onClose={() => setIsAddDialogOpen(false)}
         onAdd={handleAddAccount}
-        existingAccounts={accounts || []}
-        accountTypes={window.electron?.accountTypes || []}
+        existingAccounts={accounts}
+        accountTypes={window.electron.accountTypes}
+        processors={window.electron.processors}
       />
     </>
   );

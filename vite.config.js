@@ -4,18 +4,10 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  root: path.join(__dirname, 'src', 'frontend'),
+  root: path.join(__dirname, 'src/frontend'),
   base: './',
   build: {
     outDir: path.join(__dirname, 'dist'),
     emptyOutDir: true
-  },
-  resolve: {
-    extensions: ['.js', '.jsx', '.json']
-  },
-  esbuild: {
-    loader: 'jsx',
-    include: /src\/.*\.jsx?$/,
-    exclude: []
   }
 }); 

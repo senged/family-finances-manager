@@ -1,9 +1,11 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const DataManager = require('./src/backend/dataManager.cjs');
+const TransactionManager = require('./src/backend/transactionManager.cjs');
 
 // Create data manager instance
 const dataManager = new DataManager();
+const transactionManager = new TransactionManager(dataManager);
 
 async function showInitialDialog(mainWindow) {
   const { dialog } = require('electron');
@@ -123,11 +125,19 @@ async function createWindow() {
     if (result.type === 'new') {
       await dataManager.createNewManifest(result.path, result.name);
       await dataManager.initialize(result.path);
+      await transactionManager.initialize();
     } else {
       await dataManager.initialize(result.path);
+      await transactionManager.initialize();
     }
 
-    mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
+    // In development, connect to Vite dev server
+    if (process.env.NODE_ENV === 'development') {
+      mainWindow.loadURL('http://localhost:5173');
+      mainWindow.webContents.openDevTools();
+    } else {
+      mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
+    }
 
   } catch (error) {
     if (error.message === 'OPERATION_CANCELLED') {
@@ -143,6 +153,22 @@ async function createWindow() {
 // IPC Handlers for data management
 ipcMain.handle('get-accounts', () => {
   return dataManager.getManifest()?.accounts || [];
+});
+
+ipcMain.handle('add-account', async (event, accountData) => {
+  try {
+    const uid = await dataManager.addAccount(accountData);
+    return {
+      success: true,
+      accountId: uid
+    };
+  } catch (error) {
+    console.error('Error adding account:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
 });
 
 // Initialize data manager on app ready
