@@ -64,11 +64,16 @@ class AccountManager {
     const id = `acc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     
     // Create account directory structure
+    const baseAccountsDir = path.join(this.dataPath, 'accounts');
     const accountDir = path.join(this.accountsDir, id);
     const rawDir = path.join(accountDir, 'raw');
     const transactionsFile = path.join(accountDir, `transactions_${id}.csv`);
     
     try {
+      // Ensure base accounts directory exists first
+      await fs.mkdir(baseAccountsDir, { recursive: true });
+      
+      // Create account-specific directories
       await fs.mkdir(accountDir);
       await fs.mkdir(rawDir);
 

@@ -107,6 +107,18 @@ class DataManager {
   getAccountPaths(accountId) {
     return this.accountManager.getAccountPaths(accountId);
   }
+
+  async reloadManifest() {
+    if (!this.manifestPath) {
+      throw new Error('DataManager not initialized');
+    }
+    try {
+      const data = await fs.readFile(this.manifestPath, 'utf8');
+      this.manifest = JSON.parse(data);
+    } catch (error) {
+      throw new Error(`Failed to reload manifest: ${error.message}`);
+    }
+  }
 }
 
 module.exports = DataManager; 

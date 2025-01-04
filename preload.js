@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('electron', {
   addAccount: (account) => ipcRenderer.invoke('add-account', account),
   showFileDialog: (options) => ipcRenderer.invoke('show-file-dialog', options),
   importTransactions: (data) => ipcRenderer.invoke('import-transactions', data),
+  cleanupData: (options) => ipcRenderer.invoke('cleanup-data', options),
   
   // Use the prepared array
   processors: processorsArray,

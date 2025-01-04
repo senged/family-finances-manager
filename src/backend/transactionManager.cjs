@@ -1,7 +1,48 @@
 const fs = require('fs').promises;
 const path = require('path');
+const crypto = require('crypto');
 const { TRANSACTION_PROCESSORS } = require('./processors/transactionProcessors');
 const { initializeDatabase } = require('./database/initializeDatabase');
+
+async function calculateFileHash(filePath) {
+  const content = await fs.readFile(filePath);
+  return crypto.createHash('sha256').update(content).digest('hex');
+}
+
+async function readExistingTransactions(csvPath) {
+  try {
+    const content = await fs.readFile(csvPath, 'utf8');
+    const lines = content.split('\n').slice(1); // Skip header
+    return lines.filter(line => line.trim()).map(line => {
+      const [date, , amount, description] = line.split(',');
+      return {
+        date: date.trim(),
+        amount: parseFloat(amount),
+        description: description.replace(/^"|"$/g, '').trim() // Remove quotes
+      };
+    });
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+async function isFileAlreadyImported(rawDir, newFileHash) {
+  try {
+    // Check if this exact file content has been imported before
+    const rawFiles = await fs.readdir(rawDir);
+    for (const file of rawFiles) {
+      const existingHash = await calculateFileHash(path.join(rawDir, file));
+      if (existingHash === newFileHash) {
+        return true;
+      }
+    }
+    return false;
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  }
+}
 
 class TransactionManager {
   constructor(dataManager) {
@@ -62,10 +103,19 @@ class TransactionManager {
 
       console.log('Found account:', account);
 
+      // Calculate hash of incoming file
+      const fileHash = await calculateFileHash(filePath);
+      
       // Get account directories
       const { rawDir, transactionsFile } = this.dataManager.accountManager.getAccountPaths(accountId);
-      
-      // Copy import file to raw directory with timestamp
+
+      // Check if this exact file has been imported before
+      if (await isFileAlreadyImported(rawDir, fileHash)) {
+        console.log('This exact file has already been imported, skipping');
+        return { success: true, count: 0, skipped: true };
+      }
+
+      // Copy file to raw directory with timestamp prefix
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const fileName = path.basename(filePath);
       const rawFilePath = path.join(rawDir, `${timestamp}_${fileName}`);
@@ -86,13 +136,29 @@ class TransactionManager {
       // Process the copied file
       const transactions = await processor.processFile(rawFilePath);
 
+      // Read existing transactions for duplicate checking
+      const existingTransactions = await readExistingTransactions(transactionsFile);
+      
+      // Filter out duplicates
+      const newTransactions = transactions.filter(tx => {
+        const key = `${tx.date.toISOString()}_${tx.amount}_${tx.description}`;
+        return !existingTransactions.some(existing => 
+          `${existing.date}_${existing.amount}_${existing.description}` === key
+        );
+      });
+      
+      if (newTransactions.length === 0) {
+        console.log('All transactions are duplicates, skipping');
+        return { success: true, count: 0, skipped: true };
+      }
+
       // Append to local CSV file
-      const csvLines = transactions.map(tx => {
+      const csvLines = newTransactions.map(tx => {
         return [
           tx.date.toISOString(),
           tx.postedDate?.toISOString() || '',
           tx.amount,
-          `"${tx.description.replace(/"/g, '""')}"`, // Escape quotes in description
+          `"${tx.description.replace(/"/g, '""')}"`,
           tx.type,
           tx.balance || '',
           tx.principalAmount || '',
@@ -132,7 +198,7 @@ class TransactionManager {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
-        for (const tx of transactions) {
+        for (const tx of newTransactions) {
           const globalId = `${accountId}_${tx.date.getTime()}_${Math.random().toString(36).substr(2, 9)}`;
           
           await stmt.run([
@@ -160,13 +226,14 @@ class TransactionManager {
         console.log('\nRunning import verification...');
         const verificationResult = await this.verifyImport(accountId);
         console.log('\nImport completed successfully:', {
-          transactionsImported: transactions.length,
+          transactionsImported: newTransactions.length,
           verification: verificationResult
         });
 
         return {
           success: true,
-          count: transactions.length
+          count: newTransactions.length,
+          duplicates: transactions.length - newTransactions.length
         };
       } catch (error) {
         await this.db.run('ROLLBACK');

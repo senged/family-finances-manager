@@ -36,6 +36,7 @@ function App() {
       setAccounts(loadedAccounts);
     } catch (error) {
       console.error('Error loading accounts:', error);
+      setAccounts([]);
     }
   };
 

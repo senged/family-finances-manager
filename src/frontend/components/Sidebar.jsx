@@ -15,7 +15,8 @@ import {
   ExpandMore,
   AccountBalance as AccountIcon,
   CloudUpload as ImportIcon,
-  Add as AddIcon
+  Add as AddIcon,
+  DeleteSweep as CleanupIcon
 } from '@mui/icons-material';
 import { AccountManager } from './AccountManager.jsx';
 import ImportTransactionsDialog from './ImportTransactionsDialog';
@@ -47,14 +48,38 @@ function Sidebar({ accounts, onAccountsChange }) {
     }
   };
 
+  const handleCleanup = async (keepAccounts = false) => {
+    if (window.confirm(`Are you sure you want to ${keepAccounts ? 'clear all transaction data' : 'remove all accounts and data'}?`)) {
+      try {
+        await window.electron.cleanupData({ keepAccounts });
+        await onAccountsChange();
+        if (!keepAccounts) {
+          setAccountsOpen(false);
+        }
+      } catch (error) {
+        console.error('Cleanup failed:', error);
+        alert('Failed to cleanup data');
+      }
+    }
+  };
+
   return (
     <Box>
       <List>
         <ListItem
           secondaryAction={
-            <IconButton edge="end" onClick={() => setIsAddDialogOpen(true)}>
-              <AddIcon />
-            </IconButton>
+            <Box>
+              <IconButton onClick={() => setIsAddDialogOpen(true)}>
+                <AddIcon />
+              </IconButton>
+              <IconButton 
+                onClick={() => handleCleanup(false)}
+                color="error"
+                title="Remove all accounts and data"
+              >
+                <CleanupIcon />
+              </IconButton>
+            </Box>
           }
         >
           <ListItemButton onClick={() => setAccountsOpen(!accountsOpen)}>

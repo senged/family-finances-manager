@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const DataManager = require('./src/backend/dataManager.cjs');
 const TransactionManager = require('./src/backend/transactionManager.cjs');
+const { cleanupData } = require('./src/backend/utils/cleanup');
 
 // Create data manager instance
 const dataManager = new DataManager();
@@ -151,7 +152,9 @@ async function createWindow() {
 }
 
 // IPC Handlers for data management
-ipcMain.handle('get-accounts', () => {
+ipcMain.handle('get-accounts', async () => {
+  // Always reload manifest to ensure fresh data
+  await dataManager.reloadManifest();
   return dataManager.getManifest()?.accounts || [];
 });
 
@@ -181,6 +184,17 @@ ipcMain.handle('add-account', async (event, accountData) => {
       success: false,
       error: error.message
     };
+  }
+});
+
+ipcMain.handle('cleanup-data', async (event, options) => {
+  try {
+    await cleanupData(dataManager.getDataPath(), options);
+    await dataManager.reloadManifest();
+    return { success: true };
+  } catch (error) {
+    console.error('Cleanup failed:', error);
+    throw error;
   }
 });
 

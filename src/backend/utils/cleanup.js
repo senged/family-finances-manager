@@ -18,9 +18,7 @@ async function cleanupData(dataPath, options = { keepAccounts: true }) {
         driver: sqlite3.Database
       });
 
-      // Begin transaction
       await db.exec('BEGIN TRANSACTION');
-      
       try {
         // Always delete transactions
         await db.exec('DELETE FROM transactions;');
@@ -48,22 +46,32 @@ async function cleanupData(dataPath, options = { keepAccounts: true }) {
       }
     }
 
-    // 2. Clean transaction data in account directories
+    // 2. Clean account data
     console.log('\n2. Cleaning account data...');
     try {
       const accountsDir = path.join(dataPath, 'accounts');
-      if (!options.keepAccounts) {
+      const accountDirs = await fs.readdir(accountsDir);
+
+      if (options.keepAccounts) {
+        // Keep accounts but clean their data
+        for (const accountDir of accountDirs) {
+          const accountPath = path.join(accountsDir, accountDir);
+          const rawDir = path.join(accountPath, 'raw');
+          const transactionsFile = path.join(accountPath, `transactions_${accountDir}.csv`);
+
+          // Remove raw directory and its contents
+          await fs.rm(rawDir, { recursive: true, force: true });
+          // Remove transactions file
+          await fs.rm(transactionsFile, { force: true });
+          // Recreate empty raw directory
+          await fs.mkdir(rawDir);
+
+          console.log(`✓ Cleaned data for account: ${accountDir}`);
+        }
+      } else {
         // Remove entire accounts directory
         await fs.rm(accountsDir, { recursive: true, force: true });
-        console.log('✓ Account directories removed');
-      } else {
-        // Just clean transaction data within account directories
-        const accountDirs = await fs.readdir(accountsDir);
-        for (const accountDir of accountDirs) {
-          const transactionsDir = path.join(accountsDir, accountDir, 'transactions');
-          await fs.rm(transactionsDir, { recursive: true, force: true });
-        }
-        console.log('✓ Transaction data removed from account directories');
+        console.log('✓ Accounts directory removed');
       }
     } catch (error) {
       if (error.code === 'ENOENT') {
@@ -75,23 +83,28 @@ async function cleanupData(dataPath, options = { keepAccounts: true }) {
 
     // 3. Update manifest file
     console.log('\n3. Updating manifest file...');
-    const manifestPath = path.join(dataPath, 'manifest.json');
+    // Find the .ffm file in the directory
+    const files = await fs.readdir(dataPath);
+    const ffmFile = files.find(file => file.endsWith('.ffm'));
+    if (!ffmFile) {
+      throw new Error('No .ffm file found in data directory');
+    }
+    const ffmPath = path.join(dataPath, ffmFile);
+
     try {
-      const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+      const manifest = JSON.parse(await fs.readFile(ffmPath, 'utf8'));
       if (!options.keepAccounts) {
         manifest.accounts = [];
       } else {
-        // Clear transaction counts and date ranges but keep accounts
+        // Keep accounts but clear their transaction stats
         manifest.accounts = manifest.accounts.map(account => ({
           ...account,
-          stats: {
-            lastImport: null,
-            transactionCount: 0,
-            dateRange: { start: null, end: null }
-          }
+          lastImport: null,
+          transactionCount: 0,
+          dateRange: { start: null, end: null }
         }));
       }
-      await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+      await fs.writeFile(ffmPath, JSON.stringify(manifest, null, 2));
       console.log('✓ Manifest file updated');
     } catch (error) {
       if (error.code === 'ENOENT') {
