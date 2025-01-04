@@ -82,11 +82,18 @@ const AccountForm = ({ open, onClose, onSubmit, initialData = {} }) => {
                 value={formData.processorType}
                 onChange={handleChange}
               >
-                {Object.entries(window.electron.processorTypes).map(([key, value]) => (
-                  <MenuItem key={key} value={value.id}>
-                    {value.name}
-                  </MenuItem>
-                ))}
+                {Array.isArray(window.electron.processors) ? 
+                  window.electron.processors.map((processor) => (
+                    <MenuItem key={processor.id} value={processor.id}>
+                      {processor.name}
+                    </MenuItem>
+                  )) :
+                  Object.values(window.electron.processors).map((processor) => (
+                    <MenuItem key={processor.id} value={processor.id}>
+                      {processor.name}
+                    </MenuItem>
+                  ))
+                }
               </TextField>
             </Grid>
           </Grid>

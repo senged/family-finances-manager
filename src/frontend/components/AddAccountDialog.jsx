@@ -1,136 +1,111 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
+  Button,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  Button,
-  FormControl,
-  InputLabel,
-  Select,
   MenuItem,
-  FormHelperText,
-  Box
+  Grid
 } from '@mui/material';
 
-function AddAccountDialog({ open, onClose, onAdd, existingAccounts, accountTypes, processors }) {
-  const [name, setName] = useState('');
-  const [type, setType] = useState('');
-  const [processor, setProcessor] = useState('');
-  const [nameError, setNameError] = useState('');
+const AddAccountDialog = ({ 
+  open, 
+  onClose, 
+  onAdd, 
+  existingAccounts, 
+  accountTypes, 
+  processors 
+}) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    type: '',
+    processorType: ''
+  });
 
-  useEffect(() => {
-    if (open) {
-      setName('');
-      setType('');
-      setProcessor('');
-      setNameError('');
-    }
-  }, [open]);
-
-  const handleSubmit = () => {
-    const trimmedName = name.trim();
-    if (validateName(trimmedName) && type && processor) {
-      onAdd({
-        name: trimmedName,
-        type,
-        processorId: processor,
-        stats: {
-          lastImport: null,
-          transactionCount: 0,
-          dateRange: {
-            start: null,
-            end: null
-          }
-        },
-        settings: {
-          importPath: null,
-          columnMappings: null,
-          autoImport: false
-        }
-      });
-      onClose();
-    }
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onAdd(formData);
+    setFormData({ name: '', type: '', processorType: '' });
+    onClose();
   };
 
-  const validateName = (value) => {
-    const trimmedValue = value.trim();
-    if (!trimmedValue) {
-      setNameError('Account name cannot be empty');
-      return false;
-    }
-    if (existingAccounts.some(acc => acc.name.toLowerCase() === trimmedValue.toLowerCase())) {
-      setNameError('An account with this name already exists');
-      return false;
-    }
-    setNameError('');
-    return true;
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
   };
 
-  const handleNameChange = (event) => {
-    setName(event.target.value);
-    validateName(event.target.value);
-  };
+  // Convert accountTypes object to array of entries
+  const accountTypeEntries = Object.entries(accountTypes || {}).map(([key, value]) => ({
+    key,
+    value,
+    label: key.charAt(0).toUpperCase() + key.slice(1).toLowerCase()
+  }));
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Add New Account</DialogTitle>
-      <DialogContent>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-          <TextField
-            autoFocus
-            label="Account Name"
-            value={name}
-            onChange={handleNameChange}
-            error={!!nameError}
-            helperText={nameError}
-            fullWidth
-          />
-          <FormControl fullWidth error={!type}>
-            <InputLabel>Account Type</InputLabel>
-            <Select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              label="Account Type"
-            >
-              {accountTypes.map((type) => (
-                <MenuItem key={type} value={type}>
-                  {type}
-                </MenuItem>
-              ))}
-            </Select>
-            {!type && <FormHelperText>Please select an account type</FormHelperText>}
-          </FormControl>
-          <FormControl fullWidth>
-            <InputLabel>Transaction Processor</InputLabel>
-            <Select
-              value={processor}
-              onChange={(e) => setProcessor(e.target.value)}
-              label="Transaction Processor"
-            >
-              {processors.map((proc) => (
-                <MenuItem key={proc.id} value={proc.id}>
-                  {proc.name}
-                </MenuItem>
-              ))}
-            </Select>
-            <FormHelperText>Select how to process account transactions</FormHelperText>
-          </FormControl>
-        </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button 
-          onClick={handleSubmit}
-          disabled={!name.trim() || !type || !processor || !!nameError}
-          variant="contained"
-        >
-          Add Account
-        </Button>
-      </DialogActions>
+      <form onSubmit={handleSubmit}>
+        <DialogContent>
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                required
+                fullWidth
+                label="Account Name"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                required
+                fullWidth
+                select
+                label="Account Type"
+                name="type"
+                value={formData.type}
+                onChange={handleChange}
+              >
+                {accountTypeEntries.map(({ key, value, label }) => (
+                  <MenuItem key={key} value={value}>
+                    {label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                required
+                fullWidth
+                select
+                label="Transaction Processor"
+                name="processorType"
+                value={formData.processorType}
+                onChange={handleChange}
+              >
+                {processors.map((processor) => (
+                  <MenuItem key={processor.id} value={processor.id}>
+                    {processor.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="contained" color="primary">
+            Add Account
+          </Button>
+        </DialogActions>
+      </form>
     </Dialog>
   );
-}
+};
 
 export default AddAccountDialog; 

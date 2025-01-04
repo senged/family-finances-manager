@@ -6,91 +6,77 @@ import {
   DialogActions,
   Button,
   Typography,
-  LinearProgress,
-  List,
-  ListItem,
-  ListItemText
+  Box,
+  LinearProgress
 } from '@mui/material';
 
 function ImportTransactionsDialog({ open, onClose, account }) {
-  const [files, setFiles] = useState([]);
   const [importing, setImporting] = useState(false);
-  const [results, setResults] = useState(null);
-
-  const handleFileSelect = async () => {
-    const result = await window.electron.showFileDialog({
-      title: 'Select Transaction Files',
-      filters: [{ name: 'CSV Files', extensions: ['csv'] }],
-      properties: ['openFile', 'multiSelections']
-    });
-
-    if (!result.canceled) {
-      setFiles(result.filePaths);
-    }
-  };
+  const [error, setError] = useState(null);
 
   const handleImport = async () => {
-    setImporting(true);
     try {
-      const importResults = await window.electron.importTransactions({
-        accountId: account.id,
-        files: files
+      setImporting(true);
+      setError(null);
+
+      const result = await window.electron.showFileDialog({
+        properties: ['openFile'],
+        filters: [
+          { name: 'CSV Files', extensions: ['csv'] },
+          { name: 'All Files', extensions: ['*'] }
+        ],
+        title: `Import Transactions for ${account?.name}`
       });
-      setResults(importResults);
+
+      if (!result.canceled && result.filePaths.length > 0) {
+        await window.electron.importTransactions({
+          accountId: account.id,
+          filePath: result.filePaths[0]
+        });
+        onClose();
+      }
     } catch (error) {
-      setResults({ error: error.message });
+      console.error('Import error:', error);
+      setError(error.message);
+    } finally {
+      setImporting(false);
     }
-    setImporting(false);
   };
 
+  if (!account) return null;
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Import Transactions - {account.name}</DialogTitle>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Import Transactions</DialogTitle>
       <DialogContent>
-        {importing ? (
-          <>
-            <Typography>Importing transactions...</Typography>
+        <Typography variant="subtitle1" gutterBottom>
+          Import transactions for: {account.name}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" paragraph>
+          Select a CSV file containing transactions for this account.
+        </Typography>
+        
+        {importing && (
+          <Box sx={{ width: '100%', mt: 2 }}>
             <LinearProgress />
-          </>
-        ) : results ? (
-          <List>
-            {results.files.map(file => (
-              <ListItem key={file.path}>
-                <ListItemText
-                  primary={file.name}
-                  secondary={file.success ? 
-                    `Imported ${file.count} transactions` : 
-                    `Error: ${file.error}`}
-                />
-              </ListItem>
-            ))}
-          </List>
-        ) : (
-          <>
-            <Button onClick={handleFileSelect}>
-              Select Files
-            </Button>
-            <List>
-              {files.map(file => (
-                <ListItem key={file}>
-                  <ListItemText primary={file} />
-                </ListItem>
-              ))}
-            </List>
-          </>
+          </Box>
+        )}
+        
+        {error && (
+          <Typography color="error" sx={{ mt: 2 }}>
+            Error: {error}
+          </Typography>
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-        {!importing && !results && (
-          <Button 
-            onClick={handleImport}
-            disabled={files.length === 0}
-            variant="contained"
-          >
-            Import
-          </Button>
-        )}
+        <Button onClick={onClose}>Cancel</Button>
+        <Button 
+          onClick={handleImport} 
+          variant="contained" 
+          disabled={importing}
+        >
+          Select File
+        </Button>
       </DialogActions>
     </Dialog>
   );

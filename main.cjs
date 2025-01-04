@@ -155,6 +155,19 @@ ipcMain.handle('get-accounts', () => {
   return dataManager.getManifest()?.accounts || [];
 });
 
+ipcMain.handle('show-file-dialog', async (event, options) => {
+  return dialog.showOpenDialog(options);
+});
+
+ipcMain.handle('import-transactions', async (event, data) => {
+  try {
+    return await transactionManager.importTransactions(data);
+  } catch (error) {
+    console.error('Error importing transactions:', error);
+    throw error;
+  }
+});
+
 ipcMain.handle('add-account', async (event, accountData) => {
   try {
     const uid = await dataManager.addAccount(accountData);

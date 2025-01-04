@@ -7,7 +7,7 @@ async function initializeDatabase(dataPath) {
   // Ensure database directory exists
   const dbDir = path.join(dataPath, 'db');
   await fs.mkdir(dbDir, { recursive: true });
-
+  
   const dbPath = path.join(dbDir, 'central.db');
   
   // Open database with promise interface
@@ -27,9 +27,18 @@ async function initializeDatabase(dataPath) {
     PRAGMA synchronous = NORMAL;
   `);
 
-  // Create tables
+  // Create tables if they don't exist
   await db.exec(`
-    -- Core transaction table
+    CREATE TABLE IF NOT EXISTS accounts (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      processor_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(id)
+    );
+
     CREATE TABLE IF NOT EXISTS transactions (
       global_id TEXT PRIMARY KEY,
       account_id TEXT NOT NULL,
@@ -37,60 +46,31 @@ async function initializeDatabase(dataPath) {
       posted_date TEXT,
       amount REAL NOT NULL,
       description TEXT,
-      category TEXT,
       type TEXT NOT NULL,
       balance REAL,
-      
-      -- For mortgage transactions
       principal_amount REAL,
       interest_amount REAL,
       escrow_amount REAL,
-      
-      -- For credit card transactions
+      category TEXT,
       card_number TEXT,
-      merchant_category TEXT,
-      
-      -- Metadata
       raw_data TEXT,
-      processing_metadata TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      
-      FOREIGN KEY(account_id) REFERENCES accounts(id)
+      FOREIGN KEY (account_id) REFERENCES accounts(id)
     );
 
-    -- Import tracking
-    CREATE TABLE IF NOT EXISTS import_records (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      account_id TEXT NOT NULL,
-      file_name TEXT NOT NULL,
-      file_hash TEXT NOT NULL,
-      backup_path TEXT NOT NULL,
-      import_date DATETIME NOT NULL,
-      transaction_count INTEGER NOT NULL,
-      processor_version TEXT NOT NULL,
-      status TEXT NOT NULL,
-      
-      FOREIGN KEY(account_id) REFERENCES accounts(id)
-    );
+    CREATE INDEX IF NOT EXISTS idx_transactions_account_date 
+    ON transactions(account_id, date);
 
-    -- Create indexes
-    CREATE INDEX IF NOT EXISTS idx_account_date 
-      ON transactions(account_id, date);
-    CREATE INDEX IF NOT EXISTS idx_category 
-      ON transactions(category);
-    CREATE INDEX IF NOT EXISTS idx_type 
-      ON transactions(type);
-    CREATE INDEX IF NOT EXISTS idx_date 
-      ON transactions(date);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_file_hash 
-      ON import_records(account_id, file_hash);
+    CREATE INDEX IF NOT EXISTS idx_transactions_type 
+    ON transactions(type);
+
+    CREATE INDEX IF NOT EXISTS idx_transactions_category 
+    ON transactions(category);
   `);
 
   return db;
 }
 
-// Helper to safely close database
 async function closeDatabase(db) {
   if (db) {
     await db.close();

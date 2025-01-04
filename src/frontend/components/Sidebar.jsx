@@ -1,4 +1,4 @@
-// src/frontend/components/Sidebar.js
+// src/frontend/components/Sidebar.jsx
 import React, { useState } from 'react';
 import {
   List,
@@ -7,31 +7,48 @@ import {
   ListItemText,
   ListItemButton,
   Collapse,
-  IconButton
+  IconButton,
+  Box
 } from '@mui/material';
 import {
   ExpandLess,
   ExpandMore,
   AccountBalance as AccountIcon,
+  CloudUpload as ImportIcon,
   Add as AddIcon
 } from '@mui/icons-material';
+import { AccountManager } from './AccountManager.jsx';
+import ImportTransactionsDialog from './ImportTransactionsDialog';
 import AddAccountDialog from './AddAccountDialog';
 
 function Sidebar({ accounts, onAccountsChange }) {
   const [accountsOpen, setAccountsOpen] = useState(true);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+
+  const handleImport = (account) => {
+    setSelectedAccount(account);
+    setImportDialogOpen(true);
+  };
 
   const handleAddAccount = async (accountData) => {
     try {
-      await window.electron.addAccount(accountData);
-      onAccountsChange(); // Refresh the accounts list
+      const result = await window.electron.addAccount({
+        ...accountData,
+        processorId: accountData.processorType
+      });
+      
+      if (result.success) {
+        onAccountsChange();
+      }
     } catch (error) {
       console.error('Error adding account:', error);
     }
   };
 
   return (
-    <>
+    <Box>
       <List>
         <ListItem
           secondaryAction={
@@ -51,23 +68,25 @@ function Sidebar({ accounts, onAccountsChange }) {
 
         <Collapse in={accountsOpen} timeout="auto" unmountOnExit>
           <List component="div" disablePadding>
-            {accounts.length === 0 ? (
-              <ListItem sx={{ pl: 4 }}>
+            {accounts.map((account) => (
+              <ListItem 
+                key={account.id} 
+                sx={{ pl: 4 }}
+              >
                 <ListItemText 
-                  primary="No accounts"
-                  primaryTypographyProps={{ color: 'text.secondary' }}
+                  primary={account.name}
+                  secondary={`${account.type} - ${
+                    window.electron.processors.find(p => p.id === account.processorId)?.name || account.processorId
+                  }`}
                 />
+                <IconButton 
+                  onClick={() => handleImport(account)}
+                  size="small"
+                >
+                  <ImportIcon />
+                </IconButton>
               </ListItem>
-            ) : (
-              accounts.map((account) => (
-                <ListItem key={account.id} sx={{ pl: 4 }}>
-                  <ListItemText 
-                    primary={account.name}
-                    secondary={`${account.type} - ${account.processorId}`}
-                  />
-                </ListItem>
-              ))
-            )}
+            ))}
           </List>
         </Collapse>
       </List>
@@ -80,7 +99,13 @@ function Sidebar({ accounts, onAccountsChange }) {
         accountTypes={window.electron.accountTypes}
         processors={window.electron.processors}
       />
-    </>
+
+      <ImportTransactionsDialog
+        open={importDialogOpen}
+        onClose={() => setImportDialogOpen(false)}
+        account={selectedAccount}
+      />
+    </Box>
   );
 }
 

@@ -9,5 +9,8 @@ export default defineConfig({
   build: {
     outDir: path.join(__dirname, 'dist'),
     emptyOutDir: true
+  },
+  resolve: {
+    extensions: ['.js', '.jsx', '.json']
   }
 }); 

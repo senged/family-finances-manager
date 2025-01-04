@@ -1,306 +1,153 @@
-// Base processor interface
-class TransactionProcessor {
-  constructor() {
-    this.name = '';
-    this.id = '';
-    this.description = '';
-    this.filePattern = /\.csv$/; // Default pattern
-  }
+const fs = require('fs').promises;
+const csv = require('csv-parse');
 
-  // Each processor must implement these methods
-  validateFile(filePath) {
-    throw new Error('Not implemented');
-  }
+const TRANSACTION_PROCESSORS = {
+  'boa_checking_savings': {
+    id: 'boa_checking_savings',
+    name: 'Bank of America Checking/Savings',
+    description: 'Processor for Bank of America checking and savings accounts CSV exports',
+    
+    async processFile(filePath) {
+      const content = await fs.readFile(filePath, 'utf8');
+      
+      // First, split content into sections
+      const lines = content.split('\n');
+      let transactionStartIndex = 0;
 
-  processTransaction(row) {
-    throw new Error('Not implemented');
-  }
-}
-
-class BoACheckingSavingsProcessor extends TransactionProcessor {
-  constructor() {
-    super();
-    this.name = 'Bank of America Checking/Savings';
-    this.id = 'boa_checking_savings';
-    this.description = 'Processes Bank of America checking and savings account transactions';
-    this.filePattern = /\.csv$/;
-    this.summaryHeaders = ['Description', '', 'Summary Amt.'];
-    this.transactionHeaders = ['Date', 'Description', 'Amount', 'Running Bal.'];
-  }
-
-  validateFile(headers, firstDataRow) {
-    // First check if it's the summary section
-    if (JSON.stringify(headers) === JSON.stringify(this.summaryHeaders)) {
-      return true; // Skip validation for summary section
-    }
-
-    // Check transaction section headers
-    return JSON.stringify(headers) === JSON.stringify(this.transactionHeaders);
-  }
-
-  isSummaryRow(row) {
-    // Check if this is a summary section row
-    return !row['Date'] && (
-      row['Description']?.includes('Beginning balance') ||
-      row['Description']?.includes('Total credits') ||
-      row['Description']?.includes('Total debits') ||
-      row['Description']?.includes('Ending balance')
-    );
-  }
-
-  processTransaction(row) {
-    // Skip summary rows
-    if (this.isSummaryRow(row)) {
-      return null;
-    }
-
-    // Skip rows without a date (like blank lines or headers)
-    if (!row['Date']) {
-      return null;
-    }
-
-    // Process actual transaction
-    const amount = row['Amount'] 
-      ? parseFloat(row['Amount'].replace(/[^0-9.-]+/g, ''))
-      : 0;
-
-    const balance = row['Running Bal.']
-      ? parseFloat(row['Running Bal.'].replace(/[^0-9.-]+/g, ''))
-      : null;
-
-    return {
-      date: new Date(row['Date']),
-      description: row['Description']?.trim() || '',
-      amount: amount,
-      balance: balance,
-      type: amount > 0 ? 'credit' : 'debit',
-      raw: { ...row } // Keep original data for reference
-    };
-  }
-
-  async processFile(filePath) {
-    const csv = require('csv-parse');
-    const fs = require('fs').promises;
-
-    const content = await fs.readFile(filePath, 'utf-8');
-    const records = await new Promise((resolve, reject) => {
-      csv.parse(content, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true
-      }, (err, data) => {
-        if (err) reject(err);
-        else resolve(data);
-      });
-    });
-
-    // Process records and filter out null results (summary rows)
-    return records
-      .map(record => this.processTransaction(record))
-      .filter(transaction => transaction !== null);
-  }
-}
-
-class CapitalOneCreditProcessor extends TransactionProcessor {
-  constructor() {
-    super();
-    this.name = 'Capital One Credit Card';
-    this.id = 'capital_one_credit';
-    this.description = 'Processes Capital One credit card transactions';
-    this.filePattern = /\.csv$/;
-  }
-
-  validateFile(headers) {
-    const requiredHeaders = [
-      'Transaction Date',
-      'Posted Date',
-      'Card No.',
-      'Description',
-      'Category',
-      'Debit',
-      'Credit'
-    ];
-    return requiredHeaders.every(header => headers.includes(header));
-  }
-
-  processTransaction(row) {
-    if (!row['Transaction Date']) {
-      return null;
-    }
-
-    // Helper function to parse amounts
-    const parseAmount = (value) => {
-      if (!value) return 0;
-      return parseFloat(value.replace(/[^0-9.-]+/g, '')) || 0;
-    };
-
-    // Get amount from either Debit or Credit column
-    const debit = parseAmount(row['Debit']);
-    const credit = parseAmount(row['Credit']);
-    const amount = debit ? -debit : credit;
-
-    return {
-      date: new Date(row['Transaction Date']),
-      postedDate: new Date(row['Posted Date']),
-      description: row['Description']?.trim() || '',
-      category: row['Category']?.trim() || 'Uncategorized',
-      amount: amount,
-      cardNumber: row['Card No.']?.trim(),
-      type: amount > 0 ? 'credit' : 'debit',
-      components: {
-        debit: debit,
-        credit: credit
-      },
-      raw: { ...row } // Keep original data for reference
-    };
-  }
-
-  async processFile(filePath) {
-    const csv = require('csv-parse');
-    const fs = require('fs').promises;
-
-    const content = await fs.readFile(filePath, 'utf-8');
-    const records = await new Promise((resolve, reject) => {
-      csv.parse(content, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true
-      }, (err, data) => {
-        if (err) reject(err);
-        else resolve(data);
-      });
-    });
-
-    // Process and filter out any null results
-    return records
-      .map(record => this.processTransaction(record))
-      .filter(transaction => transaction !== null);
-  }
-
-  // Helper method for category analysis
-  calculateCategoryTotals(transactions) {
-    return transactions.reduce((totals, trans) => {
-      const category = trans.category;
-      if (!totals[category]) {
-        totals[category] = {
-          count: 0,
-          total: 0
-        };
+      // Find where the actual transactions start (after the summary section)
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith('Date,Description,Amount,Running Bal.')) {
+          transactionStartIndex = i;
+          break;
+        }
       }
-      totals[category].count++;
-      totals[category].total += Math.abs(trans.amount);
-      return totals;
-    }, {});
-  }
-}
 
-class BoAMortgageProcessor extends TransactionProcessor {
-  constructor() {
-    super();
-    this.name = 'Bank of America Mortgage';
-    this.id = 'boa_mortgage';
-    this.description = 'Processes Bank of America mortgage statements';
-    this.filePattern = /\.csv$/;
-  }
-
-  validateFile(headers) {
-    const requiredHeaders = [
-      'Date', 'Description', 'Type', 'Amount', 'Payment Due Date',
-      'Principal Amount', 'Interest Paid', 'Escrow Amount'
-    ];
-    return requiredHeaders.every(header => headers.includes(header));
-  }
-
-  processTransaction(row) {
-    if (!row['Date']) {
-      return null;
-    }
-
-    // Helper function to parse amounts
-    const parseAmount = (value) => {
-      if (!value || value === '--') return 0;
-      return parseFloat(value.replace(/[$,\s]/g, '')) || 0;
-    };
-
-    // Parse all monetary values
-    const amount = parseAmount(row['Amount']);
-    const principal = parseAmount(row['Principal Amount']);
-    const interest = parseAmount(row['Interest Paid']);
-    const escrow = parseAmount(row['Escrow Amount']);
-    const fees = parseAmount(row['Fee(s) Amount']);
-
-    // Determine transaction type
-    const transactionType = row['Type']?.trim().toLowerCase() || '';
-    const isPayment = transactionType === 'payment';
-    const isEscrow = transactionType === 'escrow';
-
-    return {
-      date: new Date(row['Date']),
-      description: row['Description']?.trim() || '',
-      transactionType: row['Type']?.trim() || '',
-      amount: amount,
-      paymentDueDate: row['Payment Due Date'] ? new Date(row['Payment Due Date']) : null,
-      components: {
-        principal: principal,
-        interest: interest,
-        escrow: escrow,
-        fees: fees
-      },
-      category: isPayment ? 'payment' : 
-               isEscrow ? 'escrow' : 
-               'other',
-      type: amount > 0 ? 'credit' : 'debit',
-      raw: { ...row } // Keep original data for reference
-    };
-  }
-
-  async processFile(filePath) {
-    const csv = require('csv-parse');
-    const fs = require('fs').promises;
-
-    const content = await fs.readFile(filePath, 'utf-8');
-    const records = await new Promise((resolve, reject) => {
-      csv.parse(content, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true
-      }, (err, data) => {
-        if (err) reject(err);
-        else resolve(data);
+      // Get just the transaction portion
+      const transactionContent = lines.slice(transactionStartIndex).join('\n');
+      
+      return new Promise((resolve, reject) => {
+        csv.parse(transactionContent, {
+          columns: true,
+          skip_empty_lines: true,
+          trim: true
+        }, (err, records) => {
+          if (err) reject(err);
+          
+          const transactions = records
+            .filter(record => record.Date && record.Date !== 'Date') // Skip any header rows
+            .map(record => ({
+              date: new Date(record.Date),
+              description: record.Description,
+              amount: record.Amount ? parseFloat(record.Amount.replace(/[^0-9.-]/g, '')) : 0,
+              type: record.Amount ? 
+                (parseFloat(record.Amount.replace(/[^0-9.-]/g, '')) >= 0 ? 'credit' : 'debit') : 
+                'balance',
+              balance: record['Running Bal.'] ? 
+                parseFloat(record['Running Bal.'].replace(/[^0-9.-]/g, '')) : 
+                null,
+              raw: record
+            }))
+            .filter(tx => tx.type !== 'balance'); // Filter out balance-only rows
+          
+          resolve(transactions);
+        });
       });
-    });
+    }
+  },
 
-    // Process and filter out any null results
-    return records
-      .map(record => this.processTransaction(record))
-      .filter(transaction => transaction !== null);
+  'boa_mortgage': {
+    id: 'boa_mortgage',
+    name: 'Bank of America Mortgage',
+    description: 'Processor for Bank of America mortgage statements',
+    
+    async processFile(filePath) {
+      const content = await fs.readFile(filePath, 'utf8');
+      
+      return new Promise((resolve, reject) => {
+        csv.parse(content, {
+          columns: true,
+          skip_empty_lines: true,
+          trim: true,
+          relax_quotes: true // Handle the quoted dates and amounts
+        }, (err, records) => {
+          if (err) reject(err);
+          
+          const transactions = records.map(record => {
+            const amount = record.Amount ? 
+              parseFloat(record.Amount.replace(/[$,]/g, '')) : 0;
+            
+            const baseTransaction = {
+              date: new Date(record.Date),
+              description: record.Description,
+              type: record.Type.toLowerCase(),
+              amount: -Math.abs(amount), // Always negative since it's an outflow
+              raw: record
+            };
+
+            // Add specific fields based on transaction type
+            if (record.Type === 'Payment') {
+              return {
+                ...baseTransaction,
+                principalAmount: parseFloat(record['Principal Amount'].replace(/[$,]/g, '') || '0'),
+                interestAmount: parseFloat(record['Interest Paid'].replace(/[$,]/g, '') || '0'),
+                escrowAmount: parseFloat(record['Escrow Amount'].replace(/[$,]/g, '') || '0'),
+                paymentDueDate: record['Payment Due Date'] ? new Date(record['Payment Due Date']) : null
+              };
+            } else if (record.Type === 'Escrow') {
+              return {
+                ...baseTransaction,
+                escrowAmount: parseFloat(record['Escrow Amount'].replace(/[$,]/g, '') || '0')
+              };
+            }
+
+            return baseTransaction;
+          });
+          
+          resolve(transactions);
+        });
+      });
+    }
+  },
+
+  'capital_one_credit': {
+    id: 'capital_one_credit',
+    name: 'Capital One Credit Card',
+    description: 'Processor for Capital One credit card transaction exports',
+    
+    async processFile(filePath) {
+      const content = await fs.readFile(filePath, 'utf8');
+      
+      return new Promise((resolve, reject) => {
+        csv.parse(content, {
+          columns: true,
+          skip_empty_lines: true,
+          trim: true
+        }, (err, records) => {
+          if (err) reject(err);
+          
+          const transactions = records.map(record => {
+            // Handle amount - use Debit or Credit column
+            const amount = record.Debit ? 
+              -parseFloat(record.Debit) : // Make debits negative
+              parseFloat(record.Credit || '0'); // Credits are positive
+            
+            return {
+              date: new Date(record['Transaction Date']),
+              postedDate: new Date(record['Posted Date']),
+              amount: amount,
+              description: record.Description,
+              category: record.Category,
+              cardNumber: record['Card No.'],
+              type: amount >= 0 ? 'credit' : 'debit',
+              raw: record
+            };
+          });
+          
+          resolve(transactions);
+        });
+      });
+    }
   }
+};
 
-  // Additional helper methods for mortgage-specific analysis
-  calculateMonthlyStats(transactions) {
-    return transactions.reduce((stats, trans) => {
-      if (trans.category === 'payment') {
-        stats.totalPrincipal += trans.components.principal;
-        stats.totalInterest += trans.components.interest;
-        stats.totalEscrow += trans.components.escrow;
-      }
-      return stats;
-    }, {
-      totalPrincipal: 0,
-      totalInterest: 0,
-      totalEscrow: 0
-    });
-  }
-}
-
-// Registry of all available processors
-const TRANSACTION_PROCESSORS = [
-  new BoACheckingSavingsProcessor(),
-  new CapitalOneCreditProcessor(),
-  new BoAMortgageProcessor()
-];
-
-module.exports = {
-  TRANSACTION_PROCESSORS,
-  TransactionProcessor
-}; 
+module.exports = { TRANSACTION_PROCESSORS }; 

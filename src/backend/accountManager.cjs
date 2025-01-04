@@ -1,7 +1,6 @@
 // src/backend/accountManager.js
 const fs = require('fs').promises;
 const path = require('path');
-const { TRANSACTION_PROCESSORS } = require('./processors/transactionProcessors');
 
 // Define account types and transaction processing types
 const ACCOUNT_TYPES = {
@@ -10,6 +9,43 @@ const ACCOUNT_TYPES = {
   CREDIT: 'credit',
   MORTGAGE: 'mortgage',
   INVESTMENT: 'investment'
+};
+
+// Processor configurations for different financial institutions
+const TRANSACTION_PROCESSORS = {
+  CHASE: {
+    id: 'chase',
+    name: 'Chase Bank',
+    description: 'Processes Chase bank CSV exports',
+    dateColumn: 'Transaction Date',
+    amountColumn: 'Amount',
+    descriptionColumn: 'Description',
+    skipRows: 1
+  },
+  BANK_OF_AMERICA: {
+    id: 'bofa',
+    name: 'Bank of America',
+    description: 'Processes Bank of America CSV exports',
+    dateColumn: 'Date',
+    amountColumn: 'Amount',
+    descriptionColumn: 'Payee',
+    skipRows: 0
+  },
+  FIDELITY: {
+    id: 'fidelity',
+    name: 'Fidelity',
+    description: 'Processes Fidelity investment CSV exports',
+    dateColumn: 'Date',
+    amountColumn: 'Amount',
+    descriptionColumn: 'Description',
+    skipRows: 1
+  },
+  CUSTOM: {
+    id: 'custom',
+    name: 'Custom Format',
+    description: 'User-defined CSV format',
+    configurable: true
+  }
 };
 
 class Account {
@@ -39,17 +75,44 @@ class Account {
 class AccountManager {
   constructor(dataPath) {
     this.dataPath = dataPath;
-    this.accountsDir = path.join(dataPath, 'accounts');
+    this.accounts = new Map();
+    this.accountsFile = path.join(dataPath, 'accounts.json');
   }
 
   async initialize() {
     try {
       await fs.mkdir(this.dataPath, { recursive: true });
-      await fs.mkdir(this.accountsDir, { recursive: true });
+      await this.loadAccounts();
     } catch (error) {
       console.error('Error initializing AccountManager:', error);
       throw error;
     }
+  }
+
+  async loadAccounts() {
+    try {
+      const data = await fs.readFile(this.accountsFile, 'utf8');
+      const accounts = JSON.parse(data);
+      this.accounts = new Map(accounts.map(acc => [acc.id, new Account(
+        acc.id,
+        acc.name,
+        acc.type,
+        acc.processorType,
+        acc.processorConfig
+      )]));
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        // File doesn't exist yet, start with empty accounts
+        await this.saveAccounts();
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  async saveAccounts() {
+    const accountsArray = Array.from(this.accounts.values()).map(acc => acc.toJSON());
+    await fs.writeFile(this.accountsFile, JSON.stringify(accountsArray, null, 2));
   }
 
   async createAccount(name, type, processorType, processorConfig = {}) {
@@ -60,59 +123,12 @@ class AccountManager {
       throw new Error(`Invalid processor type: ${processorType}`);
     }
 
-    // Generate unique ID with acc_ prefix
-    const id = `acc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const id = `acc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const account = new Account(id, name, type, processorType, processorConfig);
     
-    // Create account directory structure
-    const accountDir = path.join(this.accountsDir, id);
-    const rawDir = path.join(accountDir, 'raw');
-    const transactionsFile = path.join(accountDir, `transactions_${id}.csv`);
-    
-    try {
-      await fs.mkdir(accountDir);
-      await fs.mkdir(rawDir);
-
-      // Create transactions CSV with headers
-      const headers = [
-        'date',
-        'posted_date',
-        'amount',
-        'description',
-        'type',
-        'balance',
-        'principal_amount',
-        'interest_amount',
-        'escrow_amount',
-        'category',
-        'card_number',
-        'raw_data',
-        'import_timestamp',
-        'source_file'
-      ].join(',');
-      await fs.writeFile(transactionsFile, headers + '\n');
-
-      const account = new Account(id, name, type, processorType, processorConfig);
-      return account;
-    } catch (error) {
-      // Cleanup on error
-      try {
-        await fs.rm(accountDir, { recursive: true, force: true });
-      } catch (cleanupError) {
-        console.error('Error during cleanup:', cleanupError);
-      }
-      console.error('Error creating account directories:', error);
-      throw error;
-    }
-  }
-
-  // Helper method to get account directory paths
-  getAccountPaths(accountId) {
-    const accountDir = path.join(this.accountsDir, accountId);
-    return {
-      accountDir,
-      rawDir: path.join(accountDir, 'raw'),
-      transactionsFile: path.join(accountDir, `transactions_${accountId}.csv`)
-    };
+    this.accounts.set(id, account);
+    await this.saveAccounts();
+    return account;
   }
 
   async updateAccount(id, updates) {
