@@ -29,7 +29,7 @@ class DataManager {
 
       // Initialize AccountManager
       const AccountManager = require('./accountManager').AccountManager;
-      this.accountManager = new AccountManager(this.getDataPath());
+      this.accountManager = new AccountManager(this);
       await this.accountManager.initialize();
     } catch (error) {
       throw new Error(`Failed to initialize data manager: ${error.message}`);
@@ -118,6 +118,16 @@ class DataManager {
     } catch (error) {
       throw new Error(`Failed to reload manifest: ${error.message}`);
     }
+  }
+
+  async saveManifest() {
+    if (!this.manifestPath || !this.manifest) {
+      throw new Error('DataManager not initialized');
+    }
+    await fs.writeFile(
+      this.manifestPath,
+      JSON.stringify(this.manifest, null, 2)
+    );
   }
 }
 
