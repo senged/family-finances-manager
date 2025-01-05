@@ -66,6 +66,31 @@ async function initializeDatabase(dataPath) {
 
     CREATE INDEX IF NOT EXISTS idx_transactions_category 
     ON transactions(category);
+
+    CREATE TABLE IF NOT EXISTS partners (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      aliases TEXT,  -- JSON array of alternative names
+      categories TEXT,  -- JSON array of categories
+      metadata TEXT,  -- JSON object for type-specific metadata
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS transaction_partners (
+      transaction_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL,
+      role TEXT NOT NULL,  -- 'source' or 'destination'
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (transaction_id) REFERENCES transactions(global_id),
+      FOREIGN KEY (partner_id) REFERENCES partners(id),
+      PRIMARY KEY (transaction_id, partner_id)
+    );
+
+    -- Add indexes
+    CREATE INDEX IF NOT EXISTS idx_partners_type ON partners(type);
+    CREATE INDEX IF NOT EXISTS idx_partners_name ON partners(name);
   `);
 
   return db;

@@ -2,15 +2,23 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  root: path.join(__dirname, 'src/frontend'),
   base: './',
   build: {
-    outDir: path.join(__dirname, 'dist'),
-    emptyOutDir: true
+    outDir: 'dist',
+    emptyOutDir: true,
   },
   resolve: {
-    extensions: ['.js', '.jsx', '.json']
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+    },
+  },
+  optimizeDeps: {
+    exclude: ['electron']
+  },
+  server: {
+    port: 5173
   }
 }); 

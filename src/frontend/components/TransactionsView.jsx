@@ -20,13 +20,30 @@ import {
   Button,
   Stack,
   ButtonGroup,
-  TableSortLabel
+  TableSortLabel,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Divider,
+  Grid
 } from '@mui/material';
 import { visuallyHidden } from '@mui/utils';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import format from 'date-fns/format';
+import {
+  ExpandMore as ExpandMoreIcon,
+  FilterList as FilterIcon,
+  Assessment as AssessmentIcon,
+} from '@mui/icons-material';
+import { 
+  differenceInDays, 
+  differenceInMonths, 
+  differenceInYears 
+} from 'date-fns';
+import { PartnerManagerDialog } from './partners/PartnerManagerDialog';
+import { AssignPartnerDialog } from './partners/AssignPartnerDialog';
 
 function TransactionsView({ accounts }) {
   const [transactions, setTransactions] = useState([]);
@@ -37,6 +54,7 @@ function TransactionsView({ accounts }) {
     accountIds: accounts.map(a => a.id),
     description: ''
   });
+  const [partners, setPartners] = useState([]);
   const [pendingAccountIds, setPendingAccountIds] = useState(accounts.map(a => a.id));
   const [accountSelectOpen, setAccountSelectOpen] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -44,6 +62,9 @@ function TransactionsView({ accounts }) {
   const [order, setOrder] = useState('desc');
   const [orderBy, setOrderBy] = useState('date');
   const [pendingDescription, setPendingDescription] = useState('');
+  const [showPartnerManager, setShowPartnerManager] = useState(false);
+  const [partnerDialogTransaction, setPartnerDialogTransaction] = useState(null);
+  const [unassignedCount, setUnassignedCount] = useState(0);
 
   useEffect(() => {
     const allAccountIds = accounts.map(a => a.id);
@@ -58,6 +79,62 @@ function TransactionsView({ accounts }) {
   useEffect(() => {
     loadTransactions();
   }, [filters]);
+
+  useEffect(() => {
+    const count = transactions.filter(tx => !tx.partners?.length).length;
+    setUnassignedCount(count);
+  }, [transactions]);
+
+  useEffect(() => {
+    loadPartners();
+  }, []);
+
+  const loadPartners = async () => {
+    try {
+      if (!window.electron?.getPartners) {
+        console.warn('Partner functionality not available');
+        setPartners([]);
+        return;
+      }
+      const result = await window.electron.getPartners();
+      setPartners(result || []);
+    } catch (error) {
+      console.error('Error loading partners:', error);
+      setPartners([]);
+    }
+  };
+
+  const handleAssignPartner = async (partnerId) => {
+    if (!partnerDialogTransaction || !partnerId) return;
+    
+    try {
+      await window.electron.assignTransactionPartner({
+        transactionId: partnerDialogTransaction.global_id,
+        partnerId,
+        role: partnerDialogTransaction.amount < 0 ? 'destination' : 'source'
+      });
+      await loadTransactions();
+      setPartnerDialogTransaction(null);
+    } catch (error) {
+      console.error('Error assigning partner:', error);
+    }
+  };
+
+  const handleCreatePartner = async (transaction) => {
+    try {
+      const newPartner = await window.electron.createPartner({
+        type: transaction.amount < 0 ? 'MERCHANT' : 'INSTITUTION',
+        name: transaction.description,
+        aliases: [transaction.description],
+        categories: []
+      });
+      
+      await handleAssignPartner(newPartner.id);
+      await loadPartners();
+    } catch (error) {
+      console.error('Error creating partner:', error);
+    }
+  };
 
   const loadDatasetRange = async () => {
     try {
@@ -302,6 +379,296 @@ function TransactionsView({ accounts }) {
     }
   };
 
+  const formatDateDuration = (startDate, endDate) => {
+    if (!startDate || !endDate) return '';
+
+    const days = differenceInDays(endDate, startDate);
+    const totalYears = days / 365.25;
+    const totalMonths = days / (365.25 / 12);
+    const totalWeeks = days / 7;
+
+    let duration = '';
+    if (totalYears >= 1) {
+      duration = `${totalYears.toFixed(1)} ${totalYears === 1 ? 'year' : 'years'}`;
+    } else if (totalMonths >= 1) {
+      duration = `${totalMonths.toFixed(1)} ${totalMonths === 1 ? 'month' : 'months'}`;
+    } else if (totalWeeks >= 1) {
+      duration = `${totalWeeks.toFixed(1)} ${totalWeeks === 1 ? 'week' : 'weeks'}`;
+    } else {
+      duration = `${days} ${days === 1 ? 'day' : 'days'}`;
+    }
+
+    return `${format(startDate, 'MMM d, yyyy')} - ${format(endDate, 'MMM d, yyyy')} (${duration})`;
+  };
+
+  const TransactionSummary = ({ transactions }) => {
+    const calculateSummary = () => {
+      const summary = {
+        inflows: 0,
+        outflows: 0,
+        transfers: 0,
+        firstDate: null,
+        lastDate: null,
+      };
+
+      transactions.forEach(tx => {
+        const amount = Number(tx.amount);
+        const date = new Date(tx.date);
+
+        // Track date range
+        if (!summary.firstDate || date < summary.firstDate) {
+          summary.firstDate = date;
+        }
+        if (!summary.lastDate || date > summary.lastDate) {
+          summary.lastDate = date;
+        }
+
+        // Categorize transaction
+        if (tx.type === 'transfer') {
+          summary.transfers += Math.abs(amount);
+        } else if (amount > 0) {
+          summary.inflows += amount;
+        } else {
+          summary.outflows += Math.abs(amount);
+        }
+      });
+
+      // Calculate net
+      summary.net = summary.inflows - summary.outflows;
+
+      // Calculate time-based averages if we have a date range
+      if (summary.firstDate && summary.lastDate) {
+        const daysDiff = (summary.lastDate - summary.firstDate) / (1000 * 60 * 60 * 24);
+        if (daysDiff > 0) {
+          const dailyNet = summary.net / daysDiff;
+          summary.monthlyNet = dailyNet * (365.25 / 12);
+          summary.yearlyNet = dailyNet * 365.25;
+
+          const dailyInflow = summary.inflows / daysDiff;
+          summary.monthlyInflow = dailyInflow * (365.25 / 12);
+          summary.yearlyInflow = dailyInflow * 365.25;
+
+          const dailyOutflow = summary.outflows / daysDiff;
+          summary.monthlyOutflow = dailyOutflow * (365.25 / 12);
+          summary.yearlyOutflow = dailyOutflow * 365.25;
+        }
+      }
+
+      return summary;
+    };
+
+    const summary = calculateSummary();
+    const formatCurrency = (amount) => {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0
+      }).format(amount);
+    };
+
+    return (
+      <Box sx={{ p: 0.5 }}>
+        <Grid container spacing={0.5}>
+          <Grid item xs={12}>
+            <Accordion defaultExpanded>
+              <AccordionSummary
+                expandIcon={<ExpandMoreIcon />}
+                sx={{ 
+                  minHeight: 40,
+                  '& .MuiAccordionSummary-content': {
+                    my: 0
+                  }
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AssessmentIcon />
+                  <Typography>Transaction Summary</Typography>
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails sx={{ p: 0.5 }}>
+                <Grid container spacing={0.5}>
+                  <Grid item xs={12}>
+                    <Paper sx={{ p: 0.5, bgcolor: 'background.paper' }}>
+                      <Grid container spacing={1} alignItems="center">
+                        <Grid item xs={12} sm={4}>
+                          <Typography variant="caption" color="text.secondary">
+                            Transaction Count
+                          </Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {transactions.length.toLocaleString()}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={8}>
+                          <Typography variant="caption" color="text.secondary">
+                            Date Range
+                          </Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {summary.firstDate && summary.lastDate ? 
+                              formatDateDuration(summary.firstDate, summary.lastDate) : 
+                              'No transactions'
+                            }
+                          </Typography>
+                        </Grid>
+                      </Grid>
+                    </Paper>
+                  </Grid>
+
+                  <Grid item xs={12}>
+                    <Typography variant="caption" sx={{ pl: 0.5 }}>
+                      Transaction Totals
+                    </Typography>
+                    <Grid container spacing={0.5}>
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ 
+                          p: 0.5, 
+                          bgcolor: 'success.light', 
+                          color: 'success.contrastText',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}>
+                          <Typography variant="caption">Total Inflows</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {formatCurrency(summary.inflows)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ 
+                          p: 0.5, 
+                          bgcolor: 'error.light', 
+                          color: 'error.contrastText',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}>
+                          <Typography variant="caption">Total Outflows</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {formatCurrency(summary.outflows)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ 
+                          p: 0.5, 
+                          bgcolor: summary.net >= 0 ? 'success.light' : 'error.light', 
+                          color: 'white',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}>
+                          <Typography variant="caption">Net Total</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {formatCurrency(summary.net)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    </Grid>
+                  </Grid>
+
+                  <Grid item xs={12}>
+                    <Typography variant="caption" sx={{ pl: 0.5 }}>
+                      Monthly Averages
+                    </Typography>
+                    <Grid container spacing={0.5}>
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ p: 0.5 }}>
+                          <Typography variant="caption">Average Monthly Inflow</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {formatCurrency(summary.monthlyInflow || 0)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ p: 0.5 }}>
+                          <Typography variant="caption">Average Monthly Outflow</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {formatCurrency(summary.monthlyOutflow || 0)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ p: 0.5 }}>
+                          <Typography variant="caption">Average Monthly Net</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {formatCurrency(summary.monthlyNet || 0)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    </Grid>
+                  </Grid>
+
+                  <Grid item xs={12}>
+                    <Typography variant="caption" sx={{ pl: 0.5 }}>
+                      Yearly Averages
+                    </Typography>
+                    <Grid container spacing={0.5}>
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ p: 0.5 }}>
+                          <Typography variant="caption">Average Yearly Inflow</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {formatCurrency(summary.yearlyInflow || 0)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ p: 0.5 }}>
+                          <Typography variant="caption">Average Yearly Outflow</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {formatCurrency(summary.yearlyOutflow || 0)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ p: 0.5 }}>
+                          <Typography variant="caption">Average Yearly Net</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {formatCurrency(summary.yearlyNet || 0)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    </Grid>
+                  </Grid>
+
+                  {summary.transfers > 0 && (
+                    <Grid item xs={12}>
+                      <Paper sx={{ 
+                        p: 0.5, 
+                        bgcolor: 'info.light', 
+                        color: 'info.contrastText',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <Typography variant="caption">Total Transfers (not included in net calculations)</Typography>
+                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                          {formatCurrency(summary.transfers)}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                  )}
+                </Grid>
+              </AccordionDetails>
+            </Accordion>
+          </Grid>
+        </Grid>
+      </Box>
+    );
+  };
+
+  const handleEditTransactionPartner = (transaction) => {
+    setPartnerDialogTransaction(transaction);
+  };
+
+  const handleRemoveTransactionPartner = async (transaction, partnerId) => {
+    try {
+      await window.electron.removeTransactionPartner(transaction.global_id, partnerId);
+      await loadTransactions();
+    } catch (error) {
+      console.error('Error removing partner:', error);
+    }
+  };
+
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <Box sx={{ 
@@ -310,29 +677,51 @@ function TransactionsView({ accounts }) {
         flexDirection: 'column',
         overflow: 'hidden'
       }}>
-        {/* Sticky Filter Controls */}
         <Paper sx={{ 
-          position: 'sticky', 
-          top: 0, 
-          zIndex: 1,
-          p: 2,
           borderRadius: 0
         }}>
-          <Stack spacing={2}>
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          {/* Filters Accordion */}
+          <Accordion defaultExpanded>
+            <AccordionSummary
+              expandIcon={<ExpandMoreIcon />}
+              sx={{ 
+                minHeight: 40,
+                bgcolor: 'background.default',
+                '& .MuiAccordionSummary-content': {
+                  my: 0
+                }
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <FilterIcon />
+                <Typography>Filters</Typography>
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails sx={{ p: 0.5 }}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                {/* Date Filters */}
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
                   <DatePicker
                     label="Start Date"
                     value={filters.startDate}
                     onChange={(date) => handleFilterChange('startDate', date)}
-                    slotProps={{ textField: { size: 'small' } }}
+                    slotProps={{ 
+                      textField: { 
+                        size: 'small',
+                        sx: { width: '130px' }
+                      }
+                    }}
                   />
                   <DatePicker
                     label="End Date"
                     value={filters.endDate}
                     onChange={(date) => handleFilterChange('endDate', date)}
-                    slotProps={{ textField: { size: 'small' } }}
+                    slotProps={{ 
+                      textField: { 
+                        size: 'small',
+                        sx: { width: '130px' }
+                      }
+                    }}
                   />
                   <Button
                     size="small"
@@ -340,12 +729,133 @@ function TransactionsView({ accounts }) {
                     onClick={handleClearDates}
                     disabled={!filters.startDate && !filters.endDate}
                   >
-                    Clear Dates
+                    Clear
                   </Button>
                 </Box>
 
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                <Divider orientation="vertical" flexItem />
+
+                {/* Account Filter */}
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <Select
+                    multiple
+                    open={accountSelectOpen}
+                    onOpen={() => setAccountSelectOpen(true)}
+                    onClose={handleDropdownClose}
+                    value={filters.accountIds}
+                    onChange={() => {}}  // Handle changes through the MenuItem clicks instead
+                    renderValue={(selected) => {
+                      if (selected.length === 0) {
+                        return 'Select Accounts';
+                      }
+                      if (selected.length === accounts.length) {
+                        return 'All Accounts';
+                      }
+                      return `${selected.length} Account${selected.length === 1 ? '' : 's'}`;
+                    }}
+                    MenuProps={{
+                      PaperProps: {
+                        sx: { 
+                          maxHeight: 400,
+                          '& .MuiList-root': {
+                            padding: 0
+                          }
+                        }
+                      }
+                    }}
+                  >
+                    <Box sx={{ 
+                      display: 'flex',
+                      flexDirection: 'column',
+                      height: '100%',
+                      minHeight: 200
+                    }}>
+                      {/* Account List */}
+                      <Box sx={{ 
+                        flexGrow: 1, 
+                        overflow: 'auto',
+                        minHeight: 100
+                      }}>
+                        {accounts.map((account) => (
+                          <MenuItem 
+                            key={account.id} 
+                            value={account.id}
+                            onClick={(event) => handleAccountSelection(event, account.id)}
+                            dense
+                            sx={{ py: 0 }}
+                          >
+                            <Checkbox 
+                              checked={pendingAccountIds.includes(account.id)}
+                              onChange={(event) => handleAccountSelection(event, account.id)}
+                              onClick={(event) => event.stopPropagation()}
+                              size="small"
+                            />
+                            <ListItemText 
+                              primary={account.name}
+                              primaryTypographyProps={{
+                                variant: 'body2'
+                              }}
+                            />
+                          </MenuItem>
+                        ))}
+                      </Box>
+
+                      {/* Action Bar */}
+                      <Box sx={{ 
+                        borderTop: 1, 
+                        borderColor: 'divider',
+                        p: 1,
+                        display: 'flex', 
+                        justifyContent: 'space-between',
+                        backgroundColor: 'background.paper',
+                        position: 'sticky',
+                        bottom: 0,
+                        zIndex: 1
+                      }}>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Button 
+                            size="small" 
+                            onClick={handleSelectNoAccounts}
+                            variant="outlined"
+                          >
+                            Clear
+                          </Button>
+                          <Button 
+                            size="small" 
+                            onClick={handleSelectAllAccounts}
+                            variant="outlined"
+                          >
+                            Select All
+                          </Button>
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Button 
+                            size="small" 
+                            onClick={handleCancelAccountSelection}
+                            variant="outlined"
+                          >
+                            Cancel
+                          </Button>
+                          <Button 
+                            size="small" 
+                            variant="contained" 
+                            onClick={handleApplyAccountSelection}
+                            color="primary"
+                          >
+                            Apply
+                          </Button>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </Select>
+                </FormControl>
+
+                <Divider orientation="vertical" flexItem />
+
+                {/* Description Search */}
+                <Box sx={{ display: 'flex', gap: 0.5, flexGrow: 1 }}>
                   <TextField
+                    fullWidth
                     label="Search Description"
                     value={pendingDescription}
                     onChange={handleDescriptionChange}
@@ -355,7 +865,6 @@ function TransactionsView({ accounts }) {
                       }
                     }}
                     size="small"
-                    sx={{ minWidth: 200 }}
                     inputProps={{
                       autoComplete: 'off',
                       spellCheck: false
@@ -379,120 +888,13 @@ function TransactionsView({ accounts }) {
                   </Button>
                 </Box>
               </Box>
+            </AccordionDetails>
+          </Accordion>
 
-              <FormControl sx={{ minWidth: 250 }} size="small">
-                <InputLabel>Accounts</InputLabel>
-                <Select
-                  multiple
-                  open={accountSelectOpen}
-                  onOpen={() => setAccountSelectOpen(true)}
-                  onClose={handleDropdownClose}
-                  value={filters.accountIds || []}
-                  label="Accounts"
-                  onChange={() => {}}
-                  renderValue={getAccountSelectionLabel}
-                  MenuProps={{
-                    PaperProps: {
-                      sx: { 
-                        maxHeight: 400,
-                        '& .MuiList-root': {
-                          padding: 0
-                        }
-                      }
-                    }
-                  }}
-                >
-                  <Box sx={{ 
-                    display: 'flex',
-                    flexDirection: 'column',
-                    height: '100%',
-                    minHeight: 200
-                  }}>
-                    {/* Account List */}
-                    <Box sx={{ 
-                      flexGrow: 1, 
-                      overflow: 'auto',
-                      minHeight: 100
-                    }}>
-                      {accounts.map((account) => (
-                        <MenuItem 
-                          key={account.id} 
-                          value={account.id}
-                          onClick={(event) => handleAccountSelection(event, account.id)}
-                          dense
-                          sx={{ py: 0 }}
-                        >
-                          <Checkbox 
-                            checked={pendingAccountIds.includes(account.id)}
-                            onChange={(event) => handleAccountSelection(event, account.id)}
-                            onClick={(event) => event.stopPropagation()}
-                            size="small"
-                          />
-                          <ListItemText 
-                            primary={account.name}
-                            primaryTypographyProps={{
-                              variant: 'body2'
-                            }}
-                          />
-                        </MenuItem>
-                      ))}
-                    </Box>
+          <Divider />
 
-                    {/* Action Bar */}
-                    <Box sx={{ 
-                      borderTop: 1, 
-                      borderColor: 'divider',
-                      p: 1,
-                      display: 'flex', 
-                      justifyContent: 'space-between',
-                      backgroundColor: 'background.paper',
-                      position: 'sticky',
-                      bottom: 0,
-                      zIndex: 1
-                    }}>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button 
-                          size="small" 
-                          onClick={handleSelectNoAccounts}
-                          variant="outlined"
-                        >
-                          Clear
-                        </Button>
-                        <Button 
-                          size="small" 
-                          onClick={handleSelectAllAccounts}
-                          variant="outlined"
-                        >
-                          Select All
-                        </Button>
-                      </Box>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button 
-                          size="small" 
-                          onClick={handleCancelAccountSelection}
-                          variant="outlined"
-                        >
-                          Cancel
-                        </Button>
-                        <Button 
-                          size="small" 
-                          variant="contained" 
-                          onClick={handleApplyAccountSelection}
-                          color="primary"
-                        >
-                          Apply
-                        </Button>
-                      </Box>
-                    </Box>
-                  </Box>
-                </Select>
-              </FormControl>
-            </Box>
-
-            <Typography variant="body2" color="text.secondary">
-              {getFilterSummary()}
-            </Typography>
-          </Stack>
+          {/* Transaction Summary */}
+          <TransactionSummary transactions={transactions} />
         </Paper>
 
         {/* Scrollable Table */}
@@ -543,6 +945,22 @@ function TransactionsView({ accounts }) {
           </Table>
         </TableContainer>
       </Box>
+
+      <PartnerManagerDialog
+        open={showPartnerManager}
+        onClose={() => setShowPartnerManager(false)}
+        transactions={transactions}
+        onUpdatePartner={loadTransactions}
+      />
+      
+      <AssignPartnerDialog
+        open={!!partnerDialogTransaction}
+        onClose={() => setPartnerDialogTransaction(null)}
+        transaction={partnerDialogTransaction}
+        existingPartners={partners}
+        onAssign={handleAssignPartner}
+        onCreateNew={handleCreatePartner}
+      />
     </LocalizationProvider>
   );
 }

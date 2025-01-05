@@ -86,4 +86,23 @@ class TransactionManager {
       throw error;
     }
   }
+
+  async getTransactions(filters) {
+    // ... existing query building ...
+    
+    // Add partner information to the results
+    const transactions = await this.db.all(query, params);
+    
+    // Fetch partners for all transactions
+    const partnerPromises = transactions.map(tx => 
+      this.partnerManager.getTransactionPartners(tx.global_id)
+    );
+    const partners = await Promise.all(partnerPromises);
+    
+    // Merge partner information into transactions
+    return transactions.map((tx, i) => ({
+      ...tx,
+      partners: partners[i]
+    }));
+  }
 } 
