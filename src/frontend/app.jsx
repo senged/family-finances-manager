@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { Box, CssBaseline, Drawer, AppBar, Toolbar, Typography } from '@mui/material';
+import { Box, CssBaseline, Drawer, AppBar, Toolbar, Typography, Tabs, Tab } from '@mui/material';
 import Sidebar from './components/Sidebar';
+import TransactionsView from './components/TransactionsView';
 
 const theme = createTheme({
   palette: {
@@ -23,8 +24,21 @@ const theme = createTheme({
   },
 });
 
+function TabPanel({ children, value, index }) {
+  return (
+    <Box
+      role="tabpanel"
+      hidden={value !== index}
+      sx={{ flexGrow: 1, overflow: 'auto' }}
+    >
+      {value === index && children}
+    </Box>
+  );
+}
+
 function App() {
   const [accounts, setAccounts] = useState([]);
+  const [currentTab, setCurrentTab] = useState(0);
 
   useEffect(() => {
     loadAccounts();
@@ -40,16 +54,29 @@ function App() {
     }
   };
 
+  const handleTabChange = (event, newValue) => {
+    setCurrentTab(newValue);
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ display: 'flex' }}>
+      <Box sx={{ display: 'flex', height: '100vh' }}>
         <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
           <Toolbar>
-            <Typography variant="h6" noWrap component="div">
+            <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
               Family Finance Manager
             </Typography>
           </Toolbar>
+          <Tabs 
+            value={currentTab} 
+            onChange={handleTabChange}
+            sx={{ backgroundColor: 'background.paper' }}
+          >
+            <Tab label="Transactions" />
+            <Tab label="Analysis" />
+            <Tab label="Reports" />
+          </Tabs>
         </AppBar>
 
         <Drawer
@@ -63,15 +90,36 @@ function App() {
             },
           }}
         >
-          <Toolbar /> {/* This creates space for the AppBar */}
+          <Toolbar /> {/* Space for AppBar */}
+          <Toolbar /> {/* Space for Tabs */}
           <Sidebar accounts={accounts} onAccountsChange={loadAccounts} />
         </Drawer>
 
-        <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
-          <Toolbar /> {/* This creates space for the AppBar */}
-          <Typography variant="h5" sx={{ color: 'text.secondary', textAlign: 'center', mt: 10 }}>
-            WIP main window
-          </Typography>
+        <Box component="main" sx={{ 
+          flexGrow: 1, 
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}>
+          <Toolbar /> {/* Space for AppBar */}
+          <Toolbar /> {/* Space for Tabs */}
+          
+          <TabPanel value={currentTab} index={0}>
+            <TransactionsView accounts={accounts} />
+          </TabPanel>
+          
+          <TabPanel value={currentTab} index={1}>
+            <Typography variant="h5" sx={{ p: 3, color: 'text.secondary', textAlign: 'center' }}>
+              Analysis View (Coming Soon)
+            </Typography>
+          </TabPanel>
+          
+          <TabPanel value={currentTab} index={2}>
+            <Typography variant="h5" sx={{ p: 3, color: 'text.secondary', textAlign: 'center' }}>
+              Reports View (Coming Soon)
+            </Typography>
+          </TabPanel>
         </Box>
       </Box>
     </ThemeProvider>

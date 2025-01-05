@@ -198,6 +198,15 @@ ipcMain.handle('cleanup-data', async (event, options) => {
   }
 });
 
+ipcMain.handle('get-transactions', async (event, filters) => {
+  try {
+    return await transactionManager.getTransactions(filters);
+  } catch (error) {
+    console.error('Error getting transactions:', error);
+    throw error;
+  }
+});
+
 // Initialize data manager on app ready
 app.whenReady().then(async () => {
   try {

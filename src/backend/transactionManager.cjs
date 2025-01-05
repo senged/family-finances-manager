@@ -207,6 +207,43 @@ class TransactionManager {
       throw error;
     }
   }
+
+  async getTransactions({ startDate, endDate, accountId }) {
+    try {
+      await this.initialize();
+
+      let query = `
+        SELECT t.*, a.name as account_name 
+        FROM transactions t
+        JOIN accounts a ON t.account_id = a.id
+        WHERE 1=1
+      `;
+      const params = [];
+
+      if (startDate) {
+        query += ' AND t.date >= ?';
+        params.push(startDate);
+      }
+
+      if (endDate) {
+        query += ' AND t.date <= ?';
+        params.push(endDate);
+      }
+
+      if (accountId) {
+        query += ' AND t.account_id = ?';
+        params.push(accountId);
+      }
+
+      query += ' ORDER BY t.date DESC, t.global_id DESC';
+
+      const transactions = await this.db.all(query, params);
+      return transactions;
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = TransactionManager; 
