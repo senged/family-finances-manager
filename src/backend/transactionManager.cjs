@@ -230,7 +230,13 @@ class TransactionManager {
         params.push(endDate);
       }
 
-      if (accountId) {
+      // Handle array of account IDs
+      if (Array.isArray(accountId) && accountId.length > 0) {
+        const placeholders = accountId.map(() => '?').join(',');
+        query += ` AND t.account_id IN (${placeholders})`;
+        params.push(...accountId);
+      } else if (typeof accountId === 'string') {
+        // Handle single account ID for backwards compatibility
         query += ' AND t.account_id = ?';
         params.push(accountId);
       }

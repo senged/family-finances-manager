@@ -8,7 +8,11 @@ import {
   ListItemButton,
   Collapse,
   IconButton,
-  Box
+  Box,
+  Typography,
+  Stack,
+  Button,
+  Divider
 } from '@mui/material';
 import {
   ExpandLess,
@@ -64,22 +68,17 @@ function Sidebar({ accounts, onAccountsChange }) {
   };
 
   return (
-    <Box>
-      <List>
+    <Box sx={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      height: '100%'
+    }}>
+      <List sx={{ flexGrow: 1 }}>
         <ListItem
           secondaryAction={
-            <Box>
-              <IconButton onClick={() => setIsAddDialogOpen(true)}>
-                <AddIcon />
-              </IconButton>
-              <IconButton 
-                onClick={() => handleCleanup(false)}
-                color="error"
-                title="Remove all accounts and data"
-              >
-                <CleanupIcon />
-              </IconButton>
-            </Box>
+            <IconButton onClick={() => setIsAddDialogOpen(true)}>
+              <AddIcon />
+            </IconButton>
           }
         >
           <ListItemButton onClick={() => setAccountsOpen(!accountsOpen)}>
@@ -97,24 +96,48 @@ function Sidebar({ accounts, onAccountsChange }) {
               <ListItem 
                 key={account.id} 
                 sx={{ pl: 4 }}
+                secondaryAction={
+                  <IconButton 
+                    onClick={() => handleImport(account)}
+                    size="small"
+                  >
+                    <ImportIcon />
+                  </IconButton>
+                }
               >
-                <ListItemText 
-                  primary={account.name}
-                  secondary={`${account.type} - ${
-                    window.electron.processors.find(p => p.id === account.processorId)?.name || account.processorId
-                  }`}
-                />
-                <IconButton 
-                  onClick={() => handleImport(account)}
-                  size="small"
-                >
-                  <ImportIcon />
-                </IconButton>
+                <Stack spacing={0.5} sx={{ py: 1 }}>
+                  <Typography variant="body1">
+                    {account.name}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {account.type.charAt(0).toUpperCase() + account.type.slice(1)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {window.electron.processors.find(p => p.id === account.processorId)?.name || account.processorId}
+                  </Typography>
+                </Stack>
               </ListItem>
             ))}
           </List>
         </Collapse>
       </List>
+
+      {/* Bottom section with cleanup controls */}
+      <Box sx={{ p: 2 }}>
+        <Divider sx={{ mb: 2 }} />
+        <Stack spacing={1}>
+          <Button
+            variant="outlined"
+            color="error"
+            size="small"
+            startIcon={<CleanupIcon />}
+            onClick={() => handleCleanup(false)}
+            fullWidth
+          >
+            Delete All Data
+          </Button>
+        </Stack>
+      </Box>
 
       <AddAccountDialog
         open={isAddDialogOpen}
