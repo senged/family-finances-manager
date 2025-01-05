@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Paper,
   Table,
@@ -44,6 +44,7 @@ import {
 } from 'date-fns';
 import { PartnerManagerDialog } from './partners/PartnerManagerDialog';
 import { AssignPartnerDialog } from './partners/AssignPartnerDialog';
+import debounce from 'lodash/debounce';
 
 function TransactionsView({ accounts }) {
   const [transactions, setTransactions] = useState([]);
@@ -65,6 +66,65 @@ function TransactionsView({ accounts }) {
   const [showPartnerManager, setShowPartnerManager] = useState(false);
   const [partnerDialogTransaction, setPartnerDialogTransaction] = useState(null);
   const [unassignedCount, setUnassignedCount] = useState(0);
+  const [searchText, setSearchText] = useState('');
+
+  // Create debounced filter update once at component initialization
+  const debouncedUpdateFilter = useMemo(
+    () => debounce((value) => {
+      setFilters(prev => ({
+        ...prev,
+        description: value
+      }));
+    }, 750),
+    []
+  );
+
+  // Simple input handler - just updates UI state
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchText(value);  // Update UI immediately
+    debouncedUpdateFilter(value);  // Schedule the filter update
+  };
+
+  // Clear handler
+  const handleClearSearch = () => {
+    debouncedUpdateFilter.cancel();
+    setSearchText('');
+    setFilters(prev => ({
+      ...prev,
+      description: ''
+    }));
+  };
+
+  // Memoize loadTransactions to prevent recreation
+  const loadTransactions = useCallback(async () => {
+    console.log('Loading transactions with filters:', filters);
+    try {
+      setLoading(true);
+      if (filters.accountIds.length === 0) {
+        setTransactions([]);
+      } else {
+        const result = await window.electron.getTransactions({
+          startDate: filters.startDate?.toISOString(),
+          endDate: filters.endDate?.toISOString(),
+          accountId: filters.accountIds,
+          description: filters.description
+        });
+        console.log(`Loaded ${result.length} transactions`);
+        setTransactions(result);
+      }
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]); // Only recreate when filters change
+
+  // Add logging to the filters effect
+  useEffect(() => {
+    console.log('EFFECT: filters changed:', filters);
+    loadTransactions();
+  }, [filters]); // Only depend on filters, not loadTransactions
 
   useEffect(() => {
     const allAccountIds = accounts.map(a => a.id);
@@ -75,10 +135,6 @@ function TransactionsView({ accounts }) {
     setPendingAccountIds(allAccountIds);
     loadDatasetRange();
   }, [accounts]);
-
-  useEffect(() => {
-    loadTransactions();
-  }, [filters]);
 
   useEffect(() => {
     const count = transactions.filter(tx => !tx.partners?.length).length;
@@ -153,27 +209,6 @@ function TransactionsView({ accounts }) {
     } catch (error) {
       console.error('Error loading dataset range:', error);
       setDatasetRange({ earliest: null, latest: null });
-    }
-  };
-
-  const loadTransactions = async () => {
-    try {
-      setLoading(true);
-      if (filters.accountIds.length === 0) {
-        setTransactions([]);
-      } else {
-        const result = await window.electron.getTransactions({
-          startDate: filters.startDate?.toISOString(),
-          endDate: filters.endDate?.toISOString(),
-          accountId: filters.accountIds,
-          description: filters.description
-        });
-        setTransactions(result);
-      }
-    } catch (error) {
-      console.error('Error loading transactions:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -360,24 +395,6 @@ function TransactionsView({ accounts }) {
       </TableSortLabel>
     </TableCell>
   );
-
-  const handleDescriptionChange = (e) => {
-    setPendingDescription(e.target.value);
-  };
-
-  const handleApplyDescription = () => {
-    const trimmedValue = pendingDescription.trim();
-    if (trimmedValue !== filters.description) {
-      handleFilterChange('description', trimmedValue);
-    }
-  };
-
-  const handleClearDescription = () => {
-    setPendingDescription('');
-    if (filters.description) {
-      handleFilterChange('description', '');
-    }
-  };
 
   const formatDateDuration = (startDate, endDate) => {
     if (!startDate || !endDate) return '';
@@ -669,6 +686,11 @@ function TransactionsView({ accounts }) {
     }
   };
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => debouncedUpdateFilter.cancel();
+  }, []);
+
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <Box sx={{ 
@@ -857,13 +879,8 @@ function TransactionsView({ accounts }) {
                   <TextField
                     fullWidth
                     label="Search Description"
-                    value={pendingDescription}
-                    onChange={handleDescriptionChange}
-                    onKeyPress={(event) => {
-                      if (event.key === 'Enter') {
-                        handleApplyDescription();
-                      }
-                    }}
+                    value={searchText}
+                    onChange={handleSearchChange}
                     size="small"
                     inputProps={{
                       autoComplete: 'off',
@@ -873,16 +890,8 @@ function TransactionsView({ accounts }) {
                   <Button
                     size="small"
                     variant="outlined"
-                    onClick={handleApplyDescription}
-                    disabled={pendingDescription.trim() === filters.description}
-                  >
-                    Apply
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={handleClearDescription}
-                    disabled={!pendingDescription && !filters.description}
+                    onClick={handleClearSearch}
+                    disabled={!searchText && !filters.description}
                   >
                     Clear
                   </Button>

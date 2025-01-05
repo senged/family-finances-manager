@@ -8,7 +8,9 @@
     "build": "vite build",
     "dev": "concurrently \"vite --mode development\" \"cross-env NODE_ENV=development electron main.cjs\"",
     "debug": "concurrently \"vite --mode development\" \"cross-env NODE_ENV=development electron --inspect=5858 main.cjs\"",
-    "verify": "cross-env NODE_ENV=development electron -i -e \"require('./src/backend/transactionManager.cjs').verifyImport(process.argv[1])\""
+    "verify": "cross-env NODE_ENV=development electron -i -e \"require('./src/backend/transactionManager.cjs').verifyImport(process.argv[1])\"",
+    "clean": "rm -rf .vite dist node_modules/.vite",
+    "clean-build": "npm run clean && npm run build"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
