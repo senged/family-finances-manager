@@ -18,7 +18,8 @@ import {
 import Sidebar from './components/Sidebar';
 import TransactionsView from './components/TransactionsView';
 
-const DRAWER_WIDTH = 240;
+const DRAWER_WIDTH = 320;
+const COLLAPSED_WIDTH = 48;
 
 const theme = createTheme({
   palette: {
@@ -130,7 +131,7 @@ function App() {
           variant="permanent"
           open={sidebarOpen}
           sx={{
-            width: sidebarOpen ? DRAWER_WIDTH : theme.spacing(7),
+            width: sidebarOpen ? DRAWER_WIDTH : COLLAPSED_WIDTH,
             flexShrink: 0,
             whiteSpace: 'nowrap',
             boxSizing: 'border-box',
@@ -139,7 +140,7 @@ function App() {
               duration: theme.transitions.duration.enteringScreen,
             }),
             '& .MuiDrawer-paper': {
-              width: sidebarOpen ? DRAWER_WIDTH : theme.spacing(7),
+              width: sidebarOpen ? DRAWER_WIDTH : COLLAPSED_WIDTH,
               transition: theme.transitions.create('width', {
                 easing: theme.transitions.easing.sharp,
                 duration: theme.transitions.duration.enteringScreen,

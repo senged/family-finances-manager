@@ -27,6 +27,7 @@ import { AccountManager } from './AccountManager.jsx';
 import ImportTransactionsDialog from './ImportTransactionsDialog';
 import AddAccountDialog from './AddAccountDialog';
 import format from 'date-fns/format';
+import { differenceInHours, differenceInDays, differenceInWeeks, differenceInMonths, differenceInYears } from 'date-fns';
 
 function Sidebar({ accounts, onAccountsChange, isCollapsed }) {
   const [accountsOpen, setAccountsOpen] = useState(true);
@@ -95,18 +96,59 @@ function Sidebar({ accounts, onAccountsChange, isCollapsed }) {
     }
   };
 
-  const formatDateRange = (range) => {
+  const formatDateRange = (range, account) => {
     if (!range) return 'No transactions';
-    return `${format(range.earliest, 'MMM d, yyyy')} - ${format(range.latest, 'MMM d, yyyy')}`;
+    
+    const dateRange = `${format(range.earliest, 'MMM d, yyyy')} - ${format(range.latest, 'MMM d, yyyy')}`;
+    
+    // Calculate relative time from last import
+    if (!account.imports || account.imports.length === 0) {
+      return dateRange;
+    }
+
+    const lastImport = account.imports
+      .filter(imp => imp.dateRange?.end)
+      .sort((a, b) => new Date(b.dateRange.end) - new Date(a.dateRange.end))[0];
+
+    if (!lastImport) {
+      return dateRange;
+    }
+
+    const lastDate = new Date(lastImport.dateRange.end);
+    const now = new Date();
+    const hours = differenceInHours(now, lastDate);
+    const days = differenceInDays(now, lastDate);
+    const weeks = differenceInWeeks(now, lastDate);
+    const months = differenceInMonths(now, lastDate);
+    const years = differenceInYears(now, lastDate);
+
+    let relativeText;
+    if (hours < 24) {
+      relativeText = hours === 1 ? '1 hour' : `${hours} hours`;
+    } else if (days < 7) {
+      relativeText = days === 1 ? '1 day' : `${days} days`;
+    } else if (weeks < 4) {
+      relativeText = weeks === 1 ? '1 week' : `${weeks} weeks`;
+    } else if (months < 12) {
+      relativeText = months === 1 ? '1 month' : `${months} months`;
+    } else {
+      relativeText = years === 1 ? '1 year' : `${years} years`;
+    }
+
+    return `${dateRange} (${relativeText} ago)`;
   };
 
   return (
     <Box sx={{ 
       display: 'flex', 
-      flexDirection: 'column', 
-      height: '100%'
+      flexDirection: 'column',
+      height: '100%',
+      overflow: 'hidden'
     }}>
-      <List sx={{ flexGrow: 1 }}>
+      <List sx={{ 
+        flexGrow: 1,
+        overflow: 'auto'
+      }}>
         <ListItem
           secondaryAction={
             !isCollapsed && (
@@ -115,6 +157,7 @@ function Sidebar({ accounts, onAccountsChange, isCollapsed }) {
               </IconButton>
             )
           }
+          sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: 'background.paper' }}
         >
           <ListItemButton 
             onClick={() => setAccountsOpen(!accountsOpen)}
@@ -125,7 +168,10 @@ function Sidebar({ accounts, onAccountsChange, isCollapsed }) {
             </ListItemIcon>
             {!isCollapsed && (
               <>
-                <ListItemText primary="Accounts" />
+                <ListItemText 
+                  primary="Accounts" 
+                  sx={{ mr: 3 }}
+                />
                 {accountsOpen ? <ExpandLess /> : <ExpandMore />}
               </>
             )}
@@ -137,17 +183,11 @@ function Sidebar({ accounts, onAccountsChange, isCollapsed }) {
             {accounts.map((account) => (
               <ListItem 
                 key={account.id} 
-                sx={{ pl: isCollapsed ? 2 : 4 }}
-                secondaryAction={
-                  !isCollapsed && (
-                    <IconButton 
-                      onClick={() => handleImport(account)}
-                      size="small"
-                    >
-                      <ImportIcon />
-                    </IconButton>
-                  )
-                }
+                sx={{ 
+                  pl: isCollapsed ? 2 : 4,
+                  pr: 2,
+                  position: 'relative'
+                }}
               >
                 {isCollapsed ? (
                   <Tooltip 
@@ -161,31 +201,43 @@ function Sidebar({ accounts, onAccountsChange, isCollapsed }) {
                           {window.electron.processors.find(p => p.id === account.processorId)?.name}
                         </Typography>
                         <Typography variant="caption" display="block" color="text.secondary">
-                          {formatDateRange(accountDateRanges[account.id])}
+                          {formatDateRange(accountDateRanges[account.id], account)}
                         </Typography>
                       </Box>
                     }
                     placement="right"
                   >
-                    <IconButton size="small">
-                      <AccountIcon fontSize="small" />
-                    </IconButton>
+                    <Box sx={{ width: '100%', textAlign: 'center' }}>•</Box>
                   </Tooltip>
                 ) : (
-                  <Stack spacing={0.5} sx={{ py: 1, width: '100%' }}>
-                    <Typography variant="body1">
-                      {account.name}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {account.type.charAt(0).toUpperCase() + account.type.slice(1)}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {window.electron.processors.find(p => p.id === account.processorId)?.name}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {formatDateRange(accountDateRanges[account.id])}
-                    </Typography>
-                  </Stack>
+                  <Box sx={{ width: '100%' }}>
+                    <Stack spacing={0.5} sx={{ py: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Typography variant="body1">
+                          {account.name}
+                        </Typography>
+                        <IconButton 
+                          onClick={() => handleImport(account)}
+                          size="small"
+                          sx={{ ml: 1 }}
+                        >
+                          <ImportIcon />
+                        </IconButton>
+                      </Box>
+                      <Typography variant="caption" color="text.secondary">
+                        {account.type.charAt(0).toUpperCase() + account.type.slice(1)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {window.electron.processors.find(p => p.id === account.processorId)?.name}
+                      </Typography>
+                      <Typography 
+                        variant="caption" 
+                        color="text.secondary"
+                      >
+                        {formatDateRange(accountDateRanges[account.id], account)}
+                      </Typography>
+                    </Stack>
+                  </Box>
                 )}
               </ListItem>
             ))}
@@ -194,8 +246,12 @@ function Sidebar({ accounts, onAccountsChange, isCollapsed }) {
       </List>
 
       {!isCollapsed && (
-        <Box sx={{ p: 2 }}>
-          <Divider sx={{ mb: 2 }} />
+        <Box sx={{ 
+          p: 2, 
+          borderTop: 1, 
+          borderColor: 'divider',
+          bgcolor: 'background.paper'
+        }}>
           <Stack spacing={1}>
             <Button
               variant="outlined"

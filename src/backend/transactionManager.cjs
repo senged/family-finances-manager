@@ -179,14 +179,18 @@ class TransactionManager {
         await this.db.run('COMMIT');
 
         // Record import in FFM
+        const dates = transactions.map(tx => new Date(tx.date).getTime());
+        const startDate = new Date(Math.min(...dates));
+        const endDate = new Date(Math.max(...dates));
+
         const importRecord = {
           originalFileName: path.basename(filePath),
           importedAt: new Date().toISOString(),
           fileHash,
           transactionsAdded: transactions.length,
           dateRange: {
-            start: transactions[0]?.date,
-            end: transactions[transactions.length - 1]?.date
+            start: startDate.toISOString(),
+            end: endDate.toISOString()
           }
         };
 
