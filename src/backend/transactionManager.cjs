@@ -208,7 +208,7 @@ class TransactionManager {
     }
   }
 
-  async getTransactions({ startDate, endDate, accountId }) {
+  async getTransactions({ startDate, endDate, accountId, description }) {
     try {
       await this.initialize();
 
@@ -228,6 +228,11 @@ class TransactionManager {
       if (endDate) {
         query += ' AND t.date <= ?';
         params.push(endDate);
+      }
+
+      if (description) {
+        query += ' AND LOWER(t.description) LIKE LOWER(?)';
+        params.push(`%${description}%`);
       }
 
       // Handle array of account IDs

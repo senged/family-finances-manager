@@ -1,8 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { Box, CssBaseline, Drawer, AppBar, Toolbar, Typography, Tabs, Tab } from '@mui/material';
+import { 
+  Box, 
+  CssBaseline, 
+  Drawer, 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  Tabs, 
+  Tab,
+  IconButton
+} from '@mui/material';
+import {
+  Menu as MenuIcon,
+  ChevronLeft as ChevronLeftIcon
+} from '@mui/icons-material';
 import Sidebar from './components/Sidebar';
 import TransactionsView from './components/TransactionsView';
+
+const DRAWER_WIDTH = 240;
 
 const theme = createTheme({
   palette: {
@@ -39,6 +55,7 @@ function TabPanel({ children, value, index }) {
 function App() {
   const [accounts, setAccounts] = useState([]);
   const [currentTab, setCurrentTab] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     loadAccounts();
@@ -58,12 +75,42 @@ function App() {
     setCurrentTab(newValue);
   };
 
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen);
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ display: 'flex', height: '100vh' }}>
-        <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+        <AppBar 
+          position="fixed" 
+          sx={{ 
+            zIndex: (theme) => theme.zIndex.drawer + 1,
+            transition: theme.transitions.create(['width', 'margin'], {
+              easing: theme.transitions.easing.sharp,
+              duration: theme.transitions.duration.leavingScreen,
+            }),
+            ...(sidebarOpen && {
+              marginLeft: DRAWER_WIDTH,
+              width: `calc(100% - ${DRAWER_WIDTH}px)`,
+              transition: theme.transitions.create(['width', 'margin'], {
+                easing: theme.transitions.easing.sharp,
+                duration: theme.transitions.duration.enteringScreen,
+              }),
+            }),
+          }}
+        >
           <Toolbar>
+            <IconButton
+              color="inherit"
+              aria-label="toggle sidebar"
+              onClick={toggleSidebar}
+              edge="start"
+              sx={{ mr: 2 }}
+            >
+              {sidebarOpen ? <ChevronLeftIcon /> : <MenuIcon />}
+            </IconButton>
             <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
               Family Finance Manager
             </Typography>
@@ -81,18 +128,29 @@ function App() {
 
         <Drawer
           variant="permanent"
+          open={sidebarOpen}
           sx={{
-            width: 240,
+            width: sidebarOpen ? DRAWER_WIDTH : theme.spacing(7),
             flexShrink: 0,
+            whiteSpace: 'nowrap',
+            boxSizing: 'border-box',
+            transition: theme.transitions.create('width', {
+              easing: theme.transitions.easing.sharp,
+              duration: theme.transitions.duration.enteringScreen,
+            }),
             '& .MuiDrawer-paper': {
-              width: 240,
-              boxSizing: 'border-box',
+              width: sidebarOpen ? DRAWER_WIDTH : theme.spacing(7),
+              transition: theme.transitions.create('width', {
+                easing: theme.transitions.easing.sharp,
+                duration: theme.transitions.duration.enteringScreen,
+              }),
+              overflowX: 'hidden',
             },
           }}
         >
           <Toolbar /> {/* Space for AppBar */}
           <Toolbar /> {/* Space for Tabs */}
-          <Sidebar accounts={accounts} onAccountsChange={loadAccounts} />
+          <Sidebar accounts={accounts} onAccountsChange={loadAccounts} isCollapsed={!sidebarOpen} />
         </Drawer>
 
         <Box component="main" sx={{ 
