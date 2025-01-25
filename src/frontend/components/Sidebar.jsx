@@ -23,7 +23,6 @@ import {
   Add as AddIcon,
   DeleteSweep as CleanupIcon
 } from '@mui/icons-material';
-import { AccountManager } from './AccountManager.jsx';
 import ImportTransactionsDialog from './ImportTransactionsDialog';
 import AddAccountDialog from './AddAccountDialog';
 import format from 'date-fns/format';
