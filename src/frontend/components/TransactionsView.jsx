@@ -916,19 +916,19 @@ function TransactionsView({ accounts }) {
                 <SortableTableCell id="description" label="Description" />
                 <SortableTableCell id="amount" label="Amount" numeric />
                 <SortableTableCell id="type" label="Type" />
-                <SortableTableCell id="balance" label="Balance" numeric />
+                {/*<SortableTableCell id="balance" label="Balance" numeric /> */}
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">
+                  <TableCell colSpan={5} align="center">
                     <Typography>Loading transactions...</Typography>
                   </TableCell>
                 </TableRow>
               ) : transactions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">
+                  <TableCell colSpan={5} align="center">
                     <Typography>No transactions found</Typography>
                   </TableCell>
                 </TableRow>
@@ -944,9 +944,6 @@ function TransactionsView({ accounts }) {
                       <TableCell>{tx.description}</TableCell>
                       <TableCell align="right">{formatCurrency(tx.amount)}</TableCell>
                       <TableCell>{tx.type}</TableCell>
-                      <TableCell align="right">
-                        {tx.balance ? formatCurrency(tx.balance) : '—'}
-                      </TableCell>
                     </TableRow>
                   ))
               )}

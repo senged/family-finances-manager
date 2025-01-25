@@ -147,6 +147,47 @@ const TRANSACTION_PROCESSORS = {
         });
       });
     }
+  },
+
+  'boa_credit_card': {
+    id: 'boa_credit_card',
+    name: 'Bank of America Credit Card',
+    description: 'Processor for Bank of America credit card transaction exports',
+
+    async processFile(filePath) {
+      console.log(`Loading file: ${filePath}`); // Log before loading the file
+      const content = await fs.readFile(filePath, 'utf8');
+
+      
+      return new Promise((resolve, reject) => {
+        csv.parse(content, {
+          columns: true,
+          skip_empty_lines: true,
+          trim: true,
+          relax_quotes: true // Handle quoted payee and address fields
+        }, (err, records) => {
+          if (err) reject(err);
+          
+          const transactions = records.map(record => {
+            const amount = parseFloat(record.Amount || '0');
+            
+            return {
+              date: new Date(record['Posted Date']),
+              description: record.Payee,
+              address: record.Address,
+              referenceNumber: record['Reference Number'],
+              amount: amount,
+              type: amount >= 0 ? 'credit' : 'debit',
+              raw: record
+            };
+          });
+          
+          console.log(`Loaded ${transactions.length} transactions from file: ${filePath}`); // Log number of transactions loaded
+          
+          resolve(transactions);
+        });
+      });
+    }
   }
 };
 
