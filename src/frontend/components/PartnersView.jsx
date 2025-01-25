@@ -118,10 +118,10 @@ const PartnersView = () => {
       </Box>
 
       <TableContainer component={Paper}>
-        <Table>
+        <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>
+              <TableCell padding="none" sx={{ pl: 2 }}>
                 <TableSortLabel
                   active={orderBy === 'name'}
                   direction={orderBy === 'name' ? order : 'asc'}
@@ -130,8 +130,9 @@ const PartnersView = () => {
                   Name
                 </TableSortLabel>
               </TableCell>
-              <TableCell>Type</TableCell>
-              <TableCell align="right">
+              <TableCell padding="none">Type</TableCell>
+              <TableCell padding="none">Internal</TableCell>
+              <TableCell padding="none" align="right">
                 <TableSortLabel
                   active={orderBy === 'transaction_count'}
                   direction={orderBy === 'transaction_count' ? order : 'asc'}
@@ -140,7 +141,7 @@ const PartnersView = () => {
                   Transactions
                 </TableSortLabel>
               </TableCell>
-              <TableCell align="right">
+              <TableCell padding="none" align="right">
                 <TableSortLabel
                   active={orderBy === 'total_debits'}
                   direction={orderBy === 'total_debits' ? order : 'asc'}
@@ -149,7 +150,7 @@ const PartnersView = () => {
                   Total Debits
                 </TableSortLabel>
               </TableCell>
-              <TableCell align="right">
+              <TableCell padding="none" align="right">
                 <TableSortLabel
                   active={orderBy === 'total_credits'}
                   direction={orderBy === 'total_credits' ? order : 'asc'}
@@ -158,7 +159,7 @@ const PartnersView = () => {
                   Total Credits
                 </TableSortLabel>
               </TableCell>
-              <TableCell align="right">
+              <TableCell padding="none" align="right">
                 <TableSortLabel
                   active={orderBy === 'net_amount'}
                   direction={orderBy === 'net_amount' ? order : 'asc'}
@@ -167,29 +168,40 @@ const PartnersView = () => {
                   Net Amount
                 </TableSortLabel>
               </TableCell>
-              <TableCell>Last Updated</TableCell>
-              <TableCell>Actions</TableCell>
+              <TableCell padding="none">Last Updated</TableCell>
+              <TableCell padding="none" align="center">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {sortedPartners.map((partner) => (
-              <TableRow key={partner.id}>
-                <TableCell>{partner.name}</TableCell>
-                <TableCell>{partner.type}</TableCell>
-                <TableCell align="right">{partner.transaction_count}</TableCell>
-                <TableCell align="right">{formatCurrency(partner.total_debits)}</TableCell>
-                <TableCell align="right">{formatCurrency(partner.total_credits)}</TableCell>
-                <TableCell align="right">{formatCurrency(partner.net_amount)}</TableCell>
-                <TableCell>
+              <TableRow 
+                key={partner.id}
+                sx={{
+                  height: '36px',
+                  '&:hover': { bgcolor: 'action.hover' },
+                  ...(partner.is_internal && {
+                    bgcolor: 'rgba(34, 47, 39, 0.6)',
+                    '&:hover': { bgcolor: 'rgba(34, 47, 39, 0.8)', color: 'inherit' }
+                  })
+                }}
+              >
+                <TableCell padding="none" sx={{ pl: 2 }}>{partner.name}</TableCell>
+                <TableCell padding="none">{partner.type}</TableCell>
+                <TableCell padding="none">{partner.is_internal ? 'Yes' : 'No'}</TableCell>
+                <TableCell padding="none" align="right">{partner.transaction_count}</TableCell>
+                <TableCell padding="none" align="right">{formatCurrency(partner.total_debits)}</TableCell>
+                <TableCell padding="none" align="right">{formatCurrency(partner.total_credits)}</TableCell>
+                <TableCell padding="none" align="right">{formatCurrency(partner.net_amount)}</TableCell>
+                <TableCell padding="none">
                   {partner.last_summary_update ? new Date(partner.last_summary_update).toLocaleString() : 'Never'}
                 </TableCell>
-                <TableCell>
+                <TableCell padding="none" align="center">
                   <IconButton
                     size="small"
                     onClick={() => setSelectedPartnerId(partner.id)}
                     title="View Transactions"
                   >
-                    <ViewIcon />
+                    <ViewIcon fontSize="small" />
                   </IconButton>
                 </TableCell>
               </TableRow>

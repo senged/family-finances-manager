@@ -175,15 +175,13 @@ function TransactionsView({ accounts }) {
     if (transactionIds.length === 0) return;
 
     try {
-      // Get partners for all transactions in one query
-      const results = await Promise.all(
-        transactionIds.map(id => window.electron.getTransactionPartners(id))
-      );
+      // Get all transaction partners in a single batch query
+      const results = await window.electron.getTransactionPartners(transactionIds);
       
       const partnerMap = new Map();
-      results.forEach((partners, index) => {
-        if (partners && partners.length > 0) {
-          partnerMap.set(transactionIds[index], partners[0]); // Assuming one partner per transaction
+      results.forEach(({ transactionId, partner }) => {
+        if (partner) {
+          partnerMap.set(transactionId, partner);
         }
       });
       
@@ -195,13 +193,19 @@ function TransactionsView({ accounts }) {
 
   const handleAssignPartner = async (transaction, partner) => {
     try {
-      await window.electron.invoke('assignPartnerToTransaction', transaction.global_id, partner.id, 'destination');
-      // Update local state
+      // Update UI immediately for better responsiveness
       const newPartners = new Map(partners);
       newPartners.set(transaction.global_id, partner);
       setPartners(newPartners);
+
+      // Then perform the backend operation
+      await window.electron.assignPartnerToTransaction(transaction.global_id, partner.id, 'destination');
     } catch (error) {
       console.error('Failed to assign partner:', error);
+      // Revert UI on error
+      const newPartners = new Map(partners);
+      newPartners.delete(transaction.global_id);
+      setPartners(newPartners);
     }
   };
 
@@ -948,74 +952,50 @@ function TransactionsView({ accounts }) {
         </Paper>
 
         {/* Scrollable Table */}
-        <TableContainer component={Paper} sx={{ flexGrow: 1, overflow: 'auto' }}>
-          <Table size="small" stickyHeader>
+        <TableContainer component={Paper}>
+          <Table size="small">
             <TableHead>
               <TableRow>
-                <SortableTableCell id="date" label="Date" />
-                <SortableTableCell id="account_id" label="Account" />
-                <SortableTableCell id="description" label="Description" />
-                <SortableTableCell id="amount" label="Amount" numeric />
-                <SortableTableCell id="type" label="Type" />
-                <SortableTableCell id="partner" label="Partner" numeric />
+                <TableCell padding="none" sx={{ pl: 2 }}>Date</TableCell>
+                <TableCell padding="none">Description</TableCell>
+                <TableCell padding="none">Account</TableCell>
+                <TableCell padding="none" align="right">Amount</TableCell>
+                <TableCell padding="none">Partner</TableCell>
+                <TableCell padding="none" align="center">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={5} align="center">
-                    <Typography>Loading transactions...</Typography>
+              {transactions.map((tx) => (
+                <TableRow
+                  key={tx.global_id}
+                  sx={{
+                    height: '36px',
+                    '&:hover': { bgcolor: 'action.hover' }
+                  }}
+                >
+                  <TableCell padding="none" sx={{ pl: 2 }}>{new Date(tx.date).toLocaleDateString()}</TableCell>
+                  <TableCell padding="none">{tx.description}</TableCell>
+                  <TableCell padding="none">{tx.account_name}</TableCell>
+                  <TableCell padding="none" align="right" sx={{
+                    color: tx.amount < 0 ? 'error.main' : 'success.main'
+                  }}>
+                    {formatCurrency(tx.amount)}
+                  </TableCell>
+                  <TableCell padding="none">{tx.partner_name || 'Unassigned'}</TableCell>
+                  <TableCell padding="none" align="center">
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setSelectedTransaction(tx);
+                        setShowAssignPartnerDialog(true);
+                      }}
+                      sx={{ minWidth: 'auto', py: 0 }}
+                    >
+                      Assign
+                    </Button>
                   </TableCell>
                 </TableRow>
-              ) : transactions.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} align="center">
-                    <Typography>No transactions found</Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                [...transactions]
-                  .sort(getComparator(order, orderBy))
-                  .map((tx) => (
-                    <TableRow key={tx.global_id}>
-                      <TableCell>{formatDate(tx.date)}</TableCell>
-                      <TableCell>
-                        {accounts.find(a => a.id === tx.account_id)?.name || tx.account_id}
-                      </TableCell>
-                      <TableCell>{tx.description}</TableCell>
-                      <TableCell align="right">{formatCurrency(tx.amount)}</TableCell>
-                      <TableCell>{tx.type}</TableCell>
-                      <TableCell>
-                        {partners.has(tx.global_id) ? (
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <PersonIcon fontSize="small" />
-                            <Typography variant="body2">
-                              {partners.get(tx.global_id).name}
-                            </Typography>
-                            <IconButton 
-                              size="small" 
-                              onClick={() => handleRemovePartner(tx)}
-                              title="Remove partner"
-                            >
-                              <ClearIcon fontSize="small" />
-                            </IconButton>
-                          </Box>
-                        ) : (
-                          <Link
-                            component="button"
-                            variant="body2"
-                            onClick={() => {
-                              setSelectedTransaction(tx);
-                              setShowAssignPartnerDialog(true);
-                            }}
-                          >
-                            Assign Partner
-                          </Link>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
-              )}
+              ))}
             </TableBody>
           </Table>
         </TableContainer>
@@ -1029,9 +1009,21 @@ function TransactionsView({ accounts }) {
             setSelectedTransaction(null);
           }}
           onAssign={(partner) => handleAssignPartner(selectedTransaction, partner)}
-          onCreateNew={(transaction) => {
-            // Handle creating new partner
-            // You can implement this later
+          onCreateNew={async (transaction) => {
+            try {
+              const newPartner = await window.electron.createPartner({
+                type: transaction.amount < 0 ? 'MERCHANT' : 'INSTITUTION',
+                name: transaction.description,
+                aliases: [transaction.description],
+                categories: []
+              });
+              
+              await handleAssignPartner(transaction, newPartner);
+              setShowAssignPartnerDialog(false);
+              setSelectedTransaction(null);
+            } catch (error) {
+              console.error('Error creating partner:', error);
+            }
           }}
         />
       )}

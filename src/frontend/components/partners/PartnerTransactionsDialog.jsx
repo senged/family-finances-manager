@@ -93,12 +93,12 @@ const PartnerTransactionsDialog = ({ partnerId, onClose }) => {
   return (
     <Dialog open maxWidth="md" fullWidth>
       <DialogTitle>
-        <Typography variant="h6">
+        <Box>
           {partner.name} Transactions
-        </Typography>
-        <Typography variant="subtitle2" color="text.secondary">
-          {transactions.length} transactions found
-        </Typography>
+          <Typography variant="subtitle2" color="text.secondary">
+            {transactions.length} transactions found
+          </Typography>
+        </Box>
       </DialogTitle>
       
       <DialogContent>

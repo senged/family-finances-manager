@@ -28,22 +28,32 @@ class DataManager {
   async initialize(manifestPath) {
     this.manifestPath = manifestPath;
     try {
+      console.log('Initializing DataManager...');
       const data = await fs.readFile(manifestPath, 'utf8');
       this.manifest = JSON.parse(data);
 
       // Initialize database
+      console.log('Initializing database...');
       this.db = await initializeDatabase(this.getDataPath());
 
       // Initialize AccountManager
+      console.log('Initializing AccountManager...');
       const AccountManager = require('./accountManager').AccountManager;
       this.accountManager = new AccountManager(this);
       await this.accountManager.initialize();
 
       // Initialize PartnerManager
+      console.log('Initializing PartnerManager...');
       this.partnerManager = new PartnerManager(this);
       await this.partnerManager.initialize();
 
+      // After all managers are initialized, sync internal partners
+      console.log('Syncing internal account partners...');
+      await this.partnerManager.syncInternalAccountPartners();
+
+      console.log('DataManager initialization complete.');
     } catch (error) {
+      console.error('Failed to initialize data manager:', error);
       throw new Error(`Failed to initialize data manager: ${error.message}`);
     }
   }

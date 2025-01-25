@@ -51,7 +51,22 @@ class AccountManager {
     }
 
     const id = `acc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    return new Account(id, name, type, processorType, processorConfig);
+    const account = new Account(id, name, type, processorType, processorConfig);
+
+    // Create an internal partner record for this account
+    await this.dataManager.partnerManager.createPartner({
+      type: 'ACCOUNT',
+      name: name,
+      isInternal: true,
+      aliases: [],
+      categories: [],
+      metadata: {
+        accountId: id,
+        accountType: type
+      }
+    });
+
+    return account;
   }
 
   getAccountTypes() {
