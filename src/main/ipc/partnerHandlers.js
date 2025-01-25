@@ -25,20 +25,20 @@ module.exports = function setupPartnerHandlers(partnerManager) {
     }
   });
 
-  ipcMain.handle('assignPartnerToTransaction', async (event, transactionId, partnerId, role) => {
-    console.log('assignPartnerToTransaction handler called:', { transactionId, partnerId, role });
+  ipcMain.handle('assignPartnerToTransaction', async (event, transactionId, partnerId) => {
+    console.log('assignPartnerToTransaction handler called:', { transactionId, partnerId });
     try {
-      return await partnerManager.assignPartnerToTransaction(transactionId, partnerId, role);
+      return await partnerManager.assignPartnerToTransaction(transactionId, partnerId);
     } catch (error) {
       console.error('Error in assignPartnerToTransaction handler:', error);
       throw error;
     }
   });
 
-  ipcMain.handle('removePartnerFromTransaction', async (event, transactionId, partnerId) => {
-    console.log('removePartnerFromTransaction handler called:', { transactionId, partnerId });
+  ipcMain.handle('removePartnerFromTransaction', async (event, transactionId) => {
+    console.log('removePartnerFromTransaction handler called:', { transactionId });
     try {
-      return await partnerManager.removePartnerFromTransaction(transactionId, partnerId);
+      return await partnerManager.removePartnerFromTransaction(transactionId);
     } catch (error) {
       console.error('Error in removePartnerFromTransaction handler:', error);
       throw error;

@@ -45,6 +45,30 @@ async function initializeDatabase(dataPath) {
       );
     `);
 
+    console.log('Creating partners table...');
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS partners (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        is_internal INTEGER NOT NULL DEFAULT 0,
+        aliases TEXT,
+        categories TEXT,
+        metadata TEXT,
+        transaction_count INTEGER DEFAULT 0,
+        total_debits REAL DEFAULT 0,
+        total_credits REAL DEFAULT 0,
+        net_amount REAL DEFAULT 0,
+        last_summary_update DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_partners_type ON partners(type);
+      CREATE INDEX IF NOT EXISTS idx_partners_name ON partners(name);
+      CREATE INDEX IF NOT EXISTS idx_partners_internal ON partners(is_internal);
+    `);
+
     console.log('Creating transactions table...');
     await db.exec(`
       CREATE TABLE IF NOT EXISTS transactions (
@@ -76,45 +100,66 @@ async function initializeDatabase(dataPath) {
       ON transactions(category);
     `);
 
-    console.log('Creating partners table...');
+    // Check if partner_id column exists in transactions table, add if missing
+    console.log('Checking for partner_id column in transactions table...');
+    const tableInfo = await db.all("PRAGMA table_info(transactions)");
+    const hasPartnerIdColumn = tableInfo.some(column => column.name === 'partner_id');
+    
+    if (!hasPartnerIdColumn) {
+      console.log('Adding partner_id column to transactions table...');
+      try {
+        await db.exec(`
+          ALTER TABLE transactions ADD COLUMN partner_id TEXT REFERENCES partners(id);
+          CREATE INDEX IF NOT EXISTS idx_transactions_partner ON transactions(partner_id);
+        `);
+        console.log('partner_id column added successfully');
+      } catch (error) {
+        console.error('Error adding partner_id column:', error);
+        // If the column already exists or there's another issue, log it but continue
+      }
+    } else {
+      console.log('partner_id column already exists');
+    }
+
+    // Migrate data from transaction_partners if the table exists
+    console.log('Checking for transaction_partners table...');
+    const tables = await db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='transaction_partners'");
+    if (tables.length > 0) {
+      console.log('Migrating data from transaction_partners table...');
+      await db.exec(`
+        UPDATE transactions 
+        SET partner_id = (
+          SELECT partner_id 
+          FROM transaction_partners 
+          WHERE transaction_partners.transaction_id = transactions.global_id 
+          AND transaction_partners.role = 'destination'
+          LIMIT 1
+        )
+        WHERE partner_id IS NULL;
+
+        DROP TABLE transaction_partners;
+      `);
+      console.log('Data migration complete');
+    }
+
+    console.log('Creating transactions view...');
     await db.exec(`
-      CREATE TABLE IF NOT EXISTS partners (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        name TEXT NOT NULL,
-        is_internal INTEGER NOT NULL DEFAULT 0,
-        aliases TEXT,
-        categories TEXT,
-        metadata TEXT,
-        transaction_count INTEGER DEFAULT 0,
-        total_debits REAL DEFAULT 0,
-        total_credits REAL DEFAULT 0,
-        net_amount REAL DEFAULT 0,
-        last_summary_update DATETIME,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_partners_type ON partners(type);
-      CREATE INDEX IF NOT EXISTS idx_partners_name ON partners(name);
-      CREATE INDEX IF NOT EXISTS idx_partners_internal ON partners(is_internal);
-    `);
-
-    console.log('Creating transaction_partners table...');
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS transaction_partners (
-        transaction_id TEXT NOT NULL,
-        partner_id TEXT NOT NULL,
-        role TEXT NOT NULL CHECK (role IN ('source', 'destination')),
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (transaction_id, partner_id),
-        FOREIGN KEY (transaction_id) REFERENCES transactions(global_id),
-        FOREIGN KEY (partner_id) REFERENCES partners(id),
-        UNIQUE (transaction_id, role)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_transaction_partners_partner 
-      ON transaction_partners(partner_id);
+      DROP VIEW IF EXISTS transactions_view;
+      CREATE VIEW transactions_view AS
+      SELECT 
+        t.global_id,
+        t.account_id,
+        a.name as account_name,
+        t.date,
+        t.amount,
+        t.description,
+        t.type,
+        t.partner_id,
+        p.name as partner_name,
+        p.is_internal as partner_is_internal
+      FROM transactions t
+      LEFT JOIN accounts a ON t.account_id = a.id
+      LEFT JOIN partners p ON t.partner_id = p.id;
     `);
 
     console.log('Database initialization complete.');

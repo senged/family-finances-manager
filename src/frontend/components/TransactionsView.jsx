@@ -151,10 +151,6 @@ function TransactionsView({ accounts }) {
     loadPartners();
   }, []);
 
-  useEffect(() => {
-    loadTransactionPartners();
-  }, [transactions]);
-
   const loadPartners = async () => {
     try {
       if (!window.electron?.getPartners) {
@@ -170,54 +166,59 @@ function TransactionsView({ accounts }) {
     }
   };
 
-  const loadTransactionPartners = async () => {
-    const transactionIds = transactions.map(t => t.global_id);
-    if (transactionIds.length === 0) return;
-
-    try {
-      // Get all transaction partners in a single batch query
-      const results = await window.electron.getTransactionPartners(transactionIds);
-      
-      const partnerMap = new Map();
-      results.forEach(({ transactionId, partner }) => {
-        if (partner) {
-          partnerMap.set(transactionId, partner);
-        }
-      });
-      
-      setPartners(partnerMap);
-    } catch (error) {
-      console.error('Failed to load transaction partners:', error);
-    }
-  };
-
   const handleAssignPartner = async (transaction, partner) => {
     try {
       // Update UI immediately for better responsiveness
-      const newPartners = new Map(partners);
-      newPartners.set(transaction.global_id, partner);
-      setPartners(newPartners);
+      const updatedTransactions = transactions.map(tx => {
+        if (tx.global_id === transaction.global_id) {
+          return {
+            ...tx,
+            partner_id: partner.id,
+            partner_name: partner.name,
+            partner_is_internal: partner.is_internal
+          };
+        }
+        return tx;
+      });
+      setTransactions(updatedTransactions);
 
       // Then perform the backend operation
-      await window.electron.assignPartnerToTransaction(transaction.global_id, partner.id, 'destination');
+      await window.electron.invoke('assignPartnerToTransaction', transaction.global_id, partner.id);
+      
+      // Refresh transactions to get updated data
+      await loadTransactions();
     } catch (error) {
       console.error('Failed to assign partner:', error);
-      // Revert UI on error
-      const newPartners = new Map(partners);
-      newPartners.delete(transaction.global_id);
-      setPartners(newPartners);
+      // Revert UI on error by reloading transactions
+      loadTransactions();
     }
   };
 
   const handleRemovePartner = async (transaction) => {
     try {
-      await window.electron.invoke('removePartnerFromTransaction', transaction.global_id, partners.get(transaction.global_id).id);
-      // Update local state
-      const newPartners = new Map(partners);
-      newPartners.delete(transaction.global_id);
-      setPartners(newPartners);
+      // Update UI immediately
+      const updatedTransactions = transactions.map(tx => {
+        if (tx.global_id === transaction.global_id) {
+          return {
+            ...tx,
+            partner_id: null,
+            partner_name: null,
+            partner_is_internal: null
+          };
+        }
+        return tx;
+      });
+      setTransactions(updatedTransactions);
+
+      // Then perform the backend operation
+      await window.electron.invoke('removePartnerFromTransaction', transaction.global_id);
+      
+      // Refresh transactions to get updated data
+      await loadTransactions();
     } catch (error) {
       console.error('Failed to remove partner:', error);
+      // Revert UI on error by reloading transactions
+      loadTransactions();
     }
   };
 
@@ -983,7 +984,16 @@ function TransactionsView({ accounts }) {
                   </TableCell>
                   <TableCell padding="none" sx={{ pl: 1 }}>
                     {tx.partner_name ? (
-                      tx.partner_name
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2">{tx.partner_name}</Typography>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleRemovePartner(tx)}
+                          sx={{ p: 0.5 }}
+                        >
+                          <ClearIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
                     ) : (
                       <Button
                         size="small"

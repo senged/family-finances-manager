@@ -49,6 +49,67 @@ class PartnerManager {
         CREATE INDEX IF NOT EXISTS idx_partners_internal ON partners(is_internal);
       `);
 
+      // Check if summary columns exist, add them if they don't
+      const tableInfo = await this.db.all("PRAGMA table_info(partners)");
+      const hasTransactionCount = tableInfo.some(col => col.name === 'transaction_count');
+      const hasTotalDebits = tableInfo.some(col => col.name === 'total_debits');
+      const hasTotalCredits = tableInfo.some(col => col.name === 'total_credits');
+      const hasNetAmount = tableInfo.some(col => col.name === 'net_amount');
+      const hasLastSummaryUpdate = tableInfo.some(col => col.name === 'last_summary_update');
+
+      if (!hasTransactionCount || !hasTotalDebits || !hasTotalCredits || !hasNetAmount || !hasLastSummaryUpdate) {
+        console.log('Adding missing summary columns to partners table...');
+        try {
+          await this.db.exec('BEGIN TRANSACTION');
+          
+          // Add each column individually, catching errors for each in case it already exists
+          if (!hasTransactionCount) {
+            try {
+              await this.db.exec('ALTER TABLE partners ADD COLUMN transaction_count INTEGER DEFAULT 0');
+            } catch (e) {
+              console.log('transaction_count column might already exist:', e.message);
+            }
+          }
+          
+          if (!hasTotalDebits) {
+            try {
+              await this.db.exec('ALTER TABLE partners ADD COLUMN total_debits REAL DEFAULT 0');
+            } catch (e) {
+              console.log('total_debits column might already exist:', e.message);
+            }
+          }
+          
+          if (!hasTotalCredits) {
+            try {
+              await this.db.exec('ALTER TABLE partners ADD COLUMN total_credits REAL DEFAULT 0');
+            } catch (e) {
+              console.log('total_credits column might already exist:', e.message);
+            }
+          }
+          
+          if (!hasNetAmount) {
+            try {
+              await this.db.exec('ALTER TABLE partners ADD COLUMN net_amount REAL DEFAULT 0');
+            } catch (e) {
+              console.log('net_amount column might already exist:', e.message);
+            }
+          }
+          
+          if (!hasLastSummaryUpdate) {
+            try {
+              await this.db.exec('ALTER TABLE partners ADD COLUMN last_summary_update DATETIME');
+            } catch (e) {
+              console.log('last_summary_update column might already exist:', e.message);
+            }
+          }
+          
+          await this.db.exec('COMMIT');
+        } catch (error) {
+          await this.db.exec('ROLLBACK');
+          throw error;
+        }
+      }
+
       console.log('PartnerManager initialization complete.');
     } catch (error) {
       console.error('Failed to initialize PartnerManager:', error);
@@ -185,116 +246,111 @@ class PartnerManager {
 
     const placeholders = ids.map(() => '?').join(',');
     const results = await this.db.all(`
-      SELECT tp.transaction_id, p.*, tp.role
-      FROM transaction_partners tp
-      JOIN partners p ON tp.partner_id = p.id
-      WHERE tp.transaction_id IN (${placeholders})
-      ORDER BY tp.role
+      SELECT 
+        t.global_id as transactionId,
+        p.id,
+        p.name,
+        p.type,
+        p.is_internal
+      FROM transactions t
+      LEFT JOIN partners p ON t.partner_id = p.id
+      WHERE t.global_id IN (${placeholders})
     `, ids);
 
     // For single ID, return array of partners
     if (!Array.isArray(transactionIds)) {
-      return results;
+      return results.map(row => ({
+        transactionId: row.transactionId,
+        partner: row.id ? {
+          id: row.id,
+          name: row.name,
+          type: row.type,
+          is_internal: row.is_internal
+        } : null
+      }));
     }
 
     // For multiple IDs, return array of { transactionId, partner } objects
     return results.map(row => ({
-      transactionId: row.transaction_id,
-      partner: {
+      transactionId: row.transactionId,
+      partner: row.id ? {
         id: row.id,
-        type: row.type,
         name: row.name,
-        role: row.role,
-        aliases: row.aliases ? JSON.parse(row.aliases) : [],
-        categories: row.categories ? JSON.parse(row.categories) : [],
-        metadata: row.metadata ? JSON.parse(row.metadata) : {}
-      }
+        type: row.type,
+        is_internal: row.is_internal
+      } : null
     }));
   }
 
-  async assignPartnerToTransaction(transactionId, partnerId, role) {
+  async assignPartnerToTransaction(transactionId, partnerId) {
     await this.ensureInitialized();
-    await this.db.run('BEGIN TRANSACTION');
-    
     try {
-      // Get the transaction to determine if it's a credit or debit
-      const transaction = await this.db.get(
-        'SELECT t.*, a.name as account_name FROM transactions t JOIN accounts a ON t.account_id = a.id WHERE t.global_id = ?',
-        [transactionId]
-      );
-
-      if (!transaction) {
-        throw new Error('Transaction not found');
-      }
-
-      // For credits (positive amount), the source is the partner
-      // For debits (negative amount), the destination is the partner
-      const isCredit = transaction.amount >= 0;
-      const partnerRole = isCredit ? 'source' : 'destination';
-      const accountRole = isCredit ? 'destination' : 'source';
-
-      // Get the account's partner record
-      let accountPartner = await this.db.get(`
-        SELECT p.* FROM partners p
-        WHERE p.is_internal = 1 
-        AND p.type = 'ACCOUNT'
-        AND json_extract(p.metadata, '$.accountId') = ?
-      `, [transaction.account_id]);
-
-      if (!accountPartner) {
-        // If no partner record exists for this account, create one
-        accountPartner = await this.createPartner({
-          type: 'ACCOUNT',
-          name: transaction.account_name,
-          isInternal: true,
-          aliases: [],
-          categories: [],
-          metadata: {
-            accountId: transaction.account_id
-          }
-        });
-      }
-
-      // Remove any existing partner assignments
       await this.db.run(
-        'DELETE FROM transaction_partners WHERE transaction_id = ?',
-        [transactionId]
+        'UPDATE transactions SET partner_id = ? WHERE global_id = ?',
+        [partnerId, transactionId]
       );
-
-      // Add partner assignment
-      await this.db.run(`
-        INSERT INTO transaction_partners (
-          transaction_id, partner_id, role
-        ) VALUES (?, ?, ?)
-      `, [transactionId, partnerId, partnerRole]);
-
-      // Add account assignment
-      await this.db.run(`
-        INSERT INTO transaction_partners (
-          transaction_id, partner_id, role
-        ) VALUES (?, ?, ?)
-      `, [transactionId, accountPartner.id, accountRole]);
-
-      // Update summaries for both partners
-      await this.refreshPartnerSummary(partnerId);
-      await this.refreshPartnerSummary(accountPartner.id);
-      
-      await this.db.run('COMMIT');
+      await this.updatePartnerStats(partnerId);
     } catch (error) {
-      await this.db.run('ROLLBACK');
+      console.error('Error assigning partner to transaction:', error);
       throw error;
     }
   }
 
-  async removePartnerFromTransaction(transactionId, partnerId) {
+  async removePartnerFromTransaction(transactionId) {
     await this.ensureInitialized();
-    await this.db.run(`
-      DELETE FROM transaction_partners 
-      WHERE transaction_id = ? AND partner_id = ?
-    `, [transactionId, partnerId]);
+    try {
+      // Get the current partner_id before removing it
+      const transaction = await this.db.get(
+        'SELECT partner_id FROM transactions WHERE global_id = ?',
+        [transactionId]
+      );
+      
+      if (transaction?.partner_id) {
+        await this.db.run(
+          'UPDATE transactions SET partner_id = NULL WHERE global_id = ?',
+          [transactionId]
+        );
+        await this.updatePartnerStats(transaction.partner_id);
+      }
+    } catch (error) {
+      console.error('Error removing partner from transaction:', error);
+      throw error;
+    }
+  }
 
-    // Update partner summary after removal
-    await this.refreshPartnerSummary(partnerId);
+  async updatePartnerStats(partnerId) {
+    await this.ensureInitialized();
+    try {
+      const stats = await this.db.get(`
+        SELECT 
+          COUNT(*) as transaction_count,
+          SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as total_debits,
+          SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as total_credits,
+          SUM(amount) as net_amount
+        FROM transactions 
+        WHERE partner_id = ?
+      `, [partnerId]);
+
+      await this.db.run(`
+        UPDATE partners 
+        SET 
+          transaction_count = ?,
+          total_debits = ?,
+          total_credits = ?,
+          net_amount = ?,
+          last_summary_update = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `, [
+        stats.transaction_count || 0,
+        stats.total_debits || 0,
+        stats.total_credits || 0,
+        stats.net_amount || 0,
+        partnerId
+      ]);
+    } catch (error) {
+      console.error('Error updating partner stats:', error);
+      throw error;
+    }
   }
 
   async refreshPartnerSummary(partnerId) {
@@ -306,8 +362,7 @@ class PartnerManager {
         SUM(CASE WHEN t.amount >= 0 THEN t.amount ELSE 0 END) as total_credits,
         SUM(t.amount) as net_amount
       FROM transactions t
-      JOIN transaction_partners tp ON t.global_id = tp.transaction_id
-      WHERE tp.partner_id = ?
+      WHERE t.partner_id = ?
     `, [partnerId]);
 
     await this.db.run(`
@@ -350,14 +405,14 @@ class PartnerManager {
       // Remove unassigned transactions
       if (removeTransactionIds.length > 0) {
         await this.db.run(`
-          DELETE FROM transaction_partners 
-          WHERE partner_id = ? AND transaction_id IN (${removeTransactionIds.map(() => '?').join(',')})
+          DELETE FROM transactions 
+          WHERE partner_id = ? AND global_id IN (${removeTransactionIds.map(() => '?').join(',')})
         `, [partnerId, ...removeTransactionIds]);
       }
 
       // Add new assignments
       for (const transactionId of addTransactionIds) {
-        await this.assignPartnerToTransaction(transactionId, partnerId, 'destination');
+        await this.assignPartnerToTransaction(transactionId, partnerId);
       }
 
       // Refresh summary data
@@ -380,10 +435,10 @@ class PartnerManager {
       SELECT t.*
       FROM transactions t
       LEFT JOIN (
-        SELECT transaction_id, COUNT(*) as partner_count
-        FROM transaction_partners
-        GROUP BY transaction_id
-      ) pc ON t.global_id = pc.transaction_id
+        SELECT global_id, COUNT(*) as partner_count
+        FROM transactions
+        GROUP BY global_id
+      ) pc ON t.global_id = pc.global_id
       WHERE pc.partner_count IS NULL OR pc.partner_count < 2
       ORDER BY t.date DESC
     `);
@@ -401,12 +456,11 @@ class PartnerManager {
     return this.db.all(`
       SELECT t.*, p.id as partner_id, p.name as partner_name
       FROM transactions t
-      LEFT JOIN transaction_partners tp ON t.global_id = tp.transaction_id
-      LEFT JOIN partners p ON tp.partner_id = p.id
+      LEFT JOIN partners p ON t.partner_id = p.id
       WHERE t.description LIKE ?
       ${amountClause}
       ORDER BY 
-        CASE WHEN tp.partner_id IS NOT NULL THEN 1 ELSE 0 END DESC,
+        CASE WHEN t.partner_id IS NOT NULL THEN 1 ELSE 0 END DESC,
         t.date DESC
       LIMIT ?
     `, [...params, limit]);
@@ -417,19 +471,18 @@ class PartnerManager {
     let partnerClause = '';
     
     if (partnerId) {
-      partnerClause = 'AND tp.partner_id = ?';
+      partnerClause = 'AND t.partner_id = ?';
       params.push(partnerId);
     }
 
     return this.db.all(`
       SELECT t.*, p.id as partner_id, p.name as partner_name,
-             COUNT(*) OVER (PARTITION BY tp.partner_id) as partner_count
+             COUNT(*) OVER (PARTITION BY t.partner_id) as partner_count
       FROM transactions t
-      LEFT JOIN transaction_partners tp ON t.global_id = tp.transaction_id
-      LEFT JOIN partners p ON tp.partner_id = p.id
+      LEFT JOIN partners p ON t.partner_id = p.id
       WHERE t.description LIKE ?
       ${partnerClause}
-      AND tp.partner_id IS NOT NULL
+      AND t.partner_id IS NOT NULL
       ORDER BY partner_count DESC, t.date DESC
     `, params);
   }
@@ -441,18 +494,16 @@ class PartnerManager {
     try {
       // Remove existing assignments for the specified role
       await this.db.run(`
-        DELETE FROM transaction_partners 
-        WHERE transaction_id IN (${transactionIds.map(() => '?').join(',')})
-        AND role = ?
-      `, [...transactionIds, role]);
+        DELETE FROM transactions 
+        WHERE global_id IN (${transactionIds.map(() => '?').join(',')})
+        AND partner_id IS NOT NULL
+      `, [...transactionIds]);
 
       // Add new assignments
       for (const transactionId of transactionIds) {
         await this.db.run(`
-          INSERT INTO transaction_partners (
-            transaction_id, partner_id, role
-          ) VALUES (?, ?, ?)
-        `, [transactionId, partnerId, role]);
+          UPDATE transactions SET partner_id = ? WHERE global_id = ?
+        `, [partnerId, transactionId]);
       }
 
       // Refresh partner summary
@@ -469,8 +520,7 @@ class PartnerManager {
     const results = await this.db.all(`
       SELECT p.*, COUNT(*) as match_count
       FROM transactions t
-      JOIN transaction_partners tp ON t.global_id = tp.transaction_id
-      JOIN partners p ON tp.partner_id = p.id
+      JOIN partners p ON t.partner_id = p.id
       WHERE t.description LIKE ?
       GROUP BY p.id
       ORDER BY match_count DESC

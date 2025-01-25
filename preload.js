@@ -10,7 +10,7 @@ const processorsArray = Object.entries(TRANSACTION_PROCESSORS).map(([id, process
 }));
 
 contextBridge.exposeInMainWorld('electron', {
-  invoke: (channel, data) => ipcRenderer.invoke(channel, data),
+  invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
   
   // Account and transaction methods
   getAccounts: () => ipcRenderer.invoke('get-accounts'),
@@ -24,14 +24,6 @@ contextBridge.exposeInMainWorld('electron', {
   listPartners: () => ipcRenderer.invoke('listPartners'),
   getPartner: (partnerId) => ipcRenderer.invoke('getPartner', partnerId),
   getTransactionPartners: (transactionId) => ipcRenderer.invoke('getTransactionPartners', transactionId),
-  assignPartnerToTransaction: (transactionId, partnerId, role) => 
-    ipcRenderer.invoke('assignPartnerToTransaction', transactionId, partnerId, role),
-  removePartnerFromTransaction: (transactionId, partnerId) => 
-    ipcRenderer.invoke('removePartnerFromTransaction', transactionId, partnerId),
-  refreshPartnerSummary: (partnerId) => ipcRenderer.invoke('refreshPartnerSummary', partnerId),
-  refreshAllPartnerSummaries: () => ipcRenderer.invoke('refreshAllPartnerSummaries'),
-  bulkUpdatePartnerTransactions: (partnerId, updates) => 
-    ipcRenderer.invoke('bulkUpdatePartnerTransactions', partnerId, updates),
   createPartner: (partnerData) => ipcRenderer.invoke('createPartner', partnerData),
   
   // Use the prepared array
