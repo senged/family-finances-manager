@@ -10,12 +10,29 @@ const processorsArray = Object.entries(TRANSACTION_PROCESSORS).map(([id, process
 }));
 
 contextBridge.exposeInMainWorld('electron', {
+  invoke: (channel, data) => ipcRenderer.invoke(channel, data),
+  
+  // Account and transaction methods
   getAccounts: () => ipcRenderer.invoke('get-accounts'),
   addAccount: (account) => ipcRenderer.invoke('add-account', account),
   showFileDialog: (options) => ipcRenderer.invoke('show-file-dialog', options),
   importTransactions: (data) => ipcRenderer.invoke('import-transactions', data),
   cleanupData: (options) => ipcRenderer.invoke('cleanup-data', options),
   getTransactions: (filters) => ipcRenderer.invoke('get-transactions', filters),
+  
+  // Partner management methods
+  listPartners: () => ipcRenderer.invoke('listPartners'),
+  getPartner: (partnerId) => ipcRenderer.invoke('getPartner', partnerId),
+  getTransactionPartners: (transactionId) => ipcRenderer.invoke('getTransactionPartners', transactionId),
+  assignPartnerToTransaction: (transactionId, partnerId, role) => 
+    ipcRenderer.invoke('assignPartnerToTransaction', transactionId, partnerId, role),
+  removePartnerFromTransaction: (transactionId, partnerId) => 
+    ipcRenderer.invoke('removePartnerFromTransaction', transactionId, partnerId),
+  refreshPartnerSummary: (partnerId) => ipcRenderer.invoke('refreshPartnerSummary', partnerId),
+  refreshAllPartnerSummaries: () => ipcRenderer.invoke('refreshAllPartnerSummaries'),
+  bulkUpdatePartnerTransactions: (partnerId, updates) => 
+    ipcRenderer.invoke('bulkUpdatePartnerTransactions', partnerId, updates),
+  createPartner: (partnerData) => ipcRenderer.invoke('createPartner', partnerData),
   
   // Use the prepared array
   processors: processorsArray,

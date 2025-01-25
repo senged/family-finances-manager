@@ -17,6 +17,7 @@ import {
 } from '@mui/icons-material';
 import Sidebar from './components/Sidebar';
 import TransactionsView from './components/TransactionsView';
+import PartnersView from './components/PartnersView';
 
 const DRAWER_WIDTH = 320;
 const COLLAPSED_WIDTH = 48;
@@ -122,6 +123,7 @@ function App() {
             sx={{ backgroundColor: 'background.paper' }}
           >
             <Tab label="Transactions" />
+            <Tab label="Partners" />
             <Tab label="Analysis" />
             <Tab label="Reports" />
           </Tabs>
@@ -169,12 +171,16 @@ function App() {
           </TabPanel>
           
           <TabPanel value={currentTab} index={1}>
+            <PartnersView />
+          </TabPanel>
+          
+          <TabPanel value={currentTab} index={2}>
             <Typography variant="h5" sx={{ p: 3, color: 'text.secondary', textAlign: 'center' }}>
               Analysis View (Coming Soon)
             </Typography>
           </TabPanel>
           
-          <TabPanel value={currentTab} index={2}>
+          <TabPanel value={currentTab} index={3}>
             <Typography variant="h5" sx={{ p: 3, color: 'text.secondary', textAlign: 'center' }}>
               Reports View (Coming Soon)
             </Typography>

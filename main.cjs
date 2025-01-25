@@ -207,6 +207,43 @@ ipcMain.handle('get-transactions', async (event, filters) => {
   }
 });
 
+// Partner management handlers
+ipcMain.handle('listPartners', async () => {
+  return dataManager.partnerManager.listPartners();
+});
+
+ipcMain.handle('getPartner', async (event, partnerId) => {
+  return dataManager.partnerManager.getPartner(partnerId);
+});
+
+ipcMain.handle('getTransactionPartners', async (event, transactionId) => {
+  return dataManager.partnerManager.getTransactionPartners(transactionId);
+});
+
+ipcMain.handle('assignPartnerToTransaction', async (event, transactionId, partnerId, role) => {
+  return dataManager.partnerManager.assignPartnerToTransaction(transactionId, partnerId, role);
+});
+
+ipcMain.handle('removePartnerFromTransaction', async (event, transactionId, partnerId) => {
+  return dataManager.partnerManager.removePartnerFromTransaction(transactionId, partnerId);
+});
+
+ipcMain.handle('refreshPartnerSummary', async (event, partnerId) => {
+  return dataManager.partnerManager.refreshPartnerSummary(partnerId);
+});
+
+ipcMain.handle('refreshAllPartnerSummaries', async () => {
+  return dataManager.partnerManager.refreshAllPartnerSummaries();
+});
+
+ipcMain.handle('bulkUpdatePartnerTransactions', async (event, partnerId, { addTransactionIds, removeTransactionIds }) => {
+  return dataManager.partnerManager.bulkUpdatePartnerTransactions(partnerId, { addTransactionIds, removeTransactionIds });
+});
+
+ipcMain.handle('createPartner', async (event, partnerData) => {
+  return dataManager.partnerManager.createPartner(partnerData);
+});
+
 // Initialize data manager on app ready
 app.whenReady().then(async () => {
   try {

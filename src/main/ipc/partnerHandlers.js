@@ -45,5 +45,25 @@ module.exports = function setupPartnerHandlers(partnerManager) {
     }
   });
 
+  ipcMain.handle('refresh-partner-summary', async (event, partnerId) => {
+    console.log('refresh-partner-summary handler called:', partnerId);
+    try {
+      return await partnerManager.refreshPartnerSummary(partnerId);
+    } catch (error) {
+      console.error('Error in refresh-partner-summary handler:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('refresh-all-partner-summaries', async () => {
+    console.log('refresh-all-partner-summaries handler called');
+    try {
+      return await partnerManager.refreshAllPartnerSummaries();
+    } catch (error) {
+      console.error('Error in refresh-all-partner-summaries handler:', error);
+      throw error;
+    }
+  });
+
   console.log('Partner handlers setup complete');
 }; 

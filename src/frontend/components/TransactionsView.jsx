@@ -25,7 +25,9 @@ import {
   AccordionSummary,
   AccordionDetails,
   Divider,
-  Grid
+  Grid,
+  IconButton,
+  Link
 } from '@mui/material';
 import { visuallyHidden } from '@mui/utils';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -36,14 +38,16 @@ import {
   ExpandMore as ExpandMoreIcon,
   FilterList as FilterIcon,
   Assessment as AssessmentIcon,
+  Person as PersonIcon,
+  Clear as ClearIcon
 } from '@mui/icons-material';
 import { 
   differenceInDays, 
   differenceInMonths, 
   differenceInYears 
 } from 'date-fns';
-import { PartnerManagerDialog } from './partners/PartnerManagerDialog';
-import { AssignPartnerDialog } from './partners/AssignPartnerDialog';
+import AssignPartnerDialog from './partners/AssignPartnerDialog';
+// import { PartnerManagerDialog } from './partners/PartnerManagerDialog';
 import debounce from 'lodash/debounce';
 
 function TransactionsView({ accounts }) {
@@ -55,7 +59,7 @@ function TransactionsView({ accounts }) {
     accountIds: accounts.map(a => a.id),
     description: ''
   });
-  const [partners, setPartners] = useState([]);
+  const [partners, setPartners] = useState(new Map());
   const [pendingAccountIds, setPendingAccountIds] = useState(accounts.map(a => a.id));
   const [accountSelectOpen, setAccountSelectOpen] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -67,6 +71,8 @@ function TransactionsView({ accounts }) {
   const [partnerDialogTransaction, setPartnerDialogTransaction] = useState(null);
   const [unassignedCount, setUnassignedCount] = useState(0);
   const [searchText, setSearchText] = useState('');
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [showAssignPartnerDialog, setShowAssignPartnerDialog] = useState(false);
 
   // Create debounced filter update once at component initialization
   const debouncedUpdateFilter = useMemo(
@@ -145,34 +151,69 @@ function TransactionsView({ accounts }) {
     loadPartners();
   }, []);
 
+  useEffect(() => {
+    loadTransactionPartners();
+  }, [transactions]);
+
   const loadPartners = async () => {
     try {
       if (!window.electron?.getPartners) {
         console.warn('Partner functionality not available');
-        setPartners([]);
+        setPartners(new Map());
         return;
       }
       const result = await window.electron.getPartners();
-      setPartners(result || []);
+      setPartners(new Map(result.map(p => [p.id, p])));
     } catch (error) {
       console.error('Error loading partners:', error);
-      setPartners([]);
+      setPartners(new Map());
     }
   };
 
-  const handleAssignPartner = async (partnerId) => {
-    if (!partnerDialogTransaction || !partnerId) return;
-    
+  const loadTransactionPartners = async () => {
+    const transactionIds = transactions.map(t => t.global_id);
+    if (transactionIds.length === 0) return;
+
     try {
-      await window.electron.assignTransactionPartner({
-        transactionId: partnerDialogTransaction.global_id,
-        partnerId,
-        role: partnerDialogTransaction.amount < 0 ? 'destination' : 'source'
+      // Get partners for all transactions in one query
+      const results = await Promise.all(
+        transactionIds.map(id => window.electron.getTransactionPartners(id))
+      );
+      
+      const partnerMap = new Map();
+      results.forEach((partners, index) => {
+        if (partners && partners.length > 0) {
+          partnerMap.set(transactionIds[index], partners[0]); // Assuming one partner per transaction
+        }
       });
-      await loadTransactions();
-      setPartnerDialogTransaction(null);
+      
+      setPartners(partnerMap);
     } catch (error) {
-      console.error('Error assigning partner:', error);
+      console.error('Failed to load transaction partners:', error);
+    }
+  };
+
+  const handleAssignPartner = async (transaction, partner) => {
+    try {
+      await window.electron.invoke('assignPartnerToTransaction', transaction.global_id, partner.id, 'destination');
+      // Update local state
+      const newPartners = new Map(partners);
+      newPartners.set(transaction.global_id, partner);
+      setPartners(newPartners);
+    } catch (error) {
+      console.error('Failed to assign partner:', error);
+    }
+  };
+
+  const handleRemovePartner = async (transaction) => {
+    try {
+      await window.electron.invoke('removePartnerFromTransaction', transaction.global_id, partners.get(transaction.global_id).id);
+      // Update local state
+      const newPartners = new Map(partners);
+      newPartners.delete(transaction.global_id);
+      setPartners(newPartners);
+    } catch (error) {
+      console.error('Failed to remove partner:', error);
     }
   };
 
@@ -185,7 +226,7 @@ function TransactionsView({ accounts }) {
         categories: []
       });
       
-      await handleAssignPartner(newPartner.id);
+      await handleAssignPartner(transaction, newPartner);
       await loadPartners();
     } catch (error) {
       console.error('Error creating partner:', error);
@@ -916,7 +957,7 @@ function TransactionsView({ accounts }) {
                 <SortableTableCell id="description" label="Description" />
                 <SortableTableCell id="amount" label="Amount" numeric />
                 <SortableTableCell id="type" label="Type" />
-                {/*<SortableTableCell id="balance" label="Balance" numeric /> */}
+                <SortableTableCell id="partner" label="Partner" numeric />
               </TableRow>
             </TableHead>
             <TableBody>
@@ -944,6 +985,34 @@ function TransactionsView({ accounts }) {
                       <TableCell>{tx.description}</TableCell>
                       <TableCell align="right">{formatCurrency(tx.amount)}</TableCell>
                       <TableCell>{tx.type}</TableCell>
+                      <TableCell>
+                        {partners.has(tx.global_id) ? (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <PersonIcon fontSize="small" />
+                            <Typography variant="body2">
+                              {partners.get(tx.global_id).name}
+                            </Typography>
+                            <IconButton 
+                              size="small" 
+                              onClick={() => handleRemovePartner(tx)}
+                              title="Remove partner"
+                            >
+                              <ClearIcon fontSize="small" />
+                            </IconButton>
+                          </Box>
+                        ) : (
+                          <Link
+                            component="button"
+                            variant="body2"
+                            onClick={() => {
+                              setSelectedTransaction(tx);
+                              setShowAssignPartnerDialog(true);
+                            }}
+                          >
+                            Assign Partner
+                          </Link>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))
               )}
@@ -952,21 +1021,20 @@ function TransactionsView({ accounts }) {
         </TableContainer>
       </Box>
 
-      <PartnerManagerDialog
-        open={showPartnerManager}
-        onClose={() => setShowPartnerManager(false)}
-        transactions={transactions}
-        onUpdatePartner={loadTransactions}
-      />
-      
-      <AssignPartnerDialog
-        open={!!partnerDialogTransaction}
-        onClose={() => setPartnerDialogTransaction(null)}
-        transaction={partnerDialogTransaction}
-        existingPartners={partners}
-        onAssign={handleAssignPartner}
-        onCreateNew={handleCreatePartner}
-      />
+      {showAssignPartnerDialog && selectedTransaction && (
+        <AssignPartnerDialog
+          transaction={selectedTransaction}
+          onClose={() => {
+            setShowAssignPartnerDialog(false);
+            setSelectedTransaction(null);
+          }}
+          onAssign={(partner) => handleAssignPartner(selectedTransaction, partner)}
+          onCreateNew={(transaction) => {
+            // Handle creating new partner
+            // You can implement this later
+          }}
+        />
+      )}
     </LocalizationProvider>
   );
 }

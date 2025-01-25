@@ -40,6 +40,18 @@ contextBridge.exposeInMainWorld(
       }
     },
     
+    listPartners: async () => {
+      try {
+        console.log('Renderer: Calling listPartners');
+        const result = await ipcRenderer.invoke('get-partners');
+        console.log('Renderer: listPartners result:', result);
+        return result;
+      } catch (error) {
+        console.error('Error in listPartners:', error);
+        throw error;
+      }
+    },
+    
     createPartner: async (partnerData) => {
       try {
         return await ipcRenderer.invoke('create-partner', partnerData);
@@ -49,20 +61,38 @@ contextBridge.exposeInMainWorld(
       }
     },
     
-    assignTransactionPartner: async (data) => {
+    assignPartnerToTransaction: async (transactionId, partnerId, role) => {
       try {
-        return await ipcRenderer.invoke('assign-transaction-partner', data);
+        return await ipcRenderer.invoke('assign-transaction-partner', { transactionId, partnerId, role });
       } catch (error) {
-        console.error('Error in assignTransactionPartner:', error);
+        console.error('Error in assignPartnerToTransaction:', error);
         throw error;
       }
     },
     
-    removeTransactionPartner: async (transactionId, partnerId) => {
+    removePartnerFromTransaction: async (transactionId, partnerId) => {
       try {
         return await ipcRenderer.invoke('remove-transaction-partner', { transactionId, partnerId });
       } catch (error) {
-        console.error('Error in removeTransactionPartner:', error);
+        console.error('Error in removePartnerFromTransaction:', error);
+        throw error;
+      }
+    },
+
+    refreshPartnerSummary: async (partnerId) => {
+      try {
+        return await ipcRenderer.invoke('refresh-partner-summary', partnerId);
+      } catch (error) {
+        console.error('Error in refreshPartnerSummary:', error);
+        throw error;
+      }
+    },
+
+    refreshAllPartnerSummaries: async () => {
+      try {
+        return await ipcRenderer.invoke('refresh-all-partner-summaries');
+      } catch (error) {
+        console.error('Error in refreshAllPartnerSummaries:', error);
         throw error;
       }
     }

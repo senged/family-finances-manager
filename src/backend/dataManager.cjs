@@ -1,5 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { initializeDatabase } = require('./database/initializeDatabase');
+const PartnerManager = require('./partnerManager');
 
 let store;
 let storeInitialized;
@@ -19,6 +21,8 @@ class DataManager {
     this.ffmPath = ffmPath;
     this.manifest = null;
     this.accountManager = null;
+    this.partnerManager = null;
+    this.db = null;
   }
 
   async initialize(manifestPath) {
@@ -27,10 +31,18 @@ class DataManager {
       const data = await fs.readFile(manifestPath, 'utf8');
       this.manifest = JSON.parse(data);
 
+      // Initialize database
+      this.db = await initializeDatabase(this.getDataPath());
+
       // Initialize AccountManager
       const AccountManager = require('./accountManager').AccountManager;
       this.accountManager = new AccountManager(this);
       await this.accountManager.initialize();
+
+      // Initialize PartnerManager
+      this.partnerManager = new PartnerManager(this);
+      await this.partnerManager.initialize();
+
     } catch (error) {
       throw new Error(`Failed to initialize data manager: ${error.message}`);
     }
