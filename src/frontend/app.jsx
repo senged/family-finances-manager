@@ -57,7 +57,7 @@ function TabPanel({ children, value, index }) {
 function App() {
   const [accounts, setAccounts] = useState([]);
   const [currentTab, setCurrentTab] = useState(0);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     loadAccounts();

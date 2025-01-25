@@ -957,11 +957,10 @@ function TransactionsView({ accounts }) {
             <TableHead>
               <TableRow>
                 <TableCell padding="none" sx={{ pl: 2 }}>Date</TableCell>
-                <TableCell padding="none">Description</TableCell>
-                <TableCell padding="none">Account</TableCell>
-                <TableCell padding="none" align="right">Amount</TableCell>
-                <TableCell padding="none">Partner</TableCell>
-                <TableCell padding="none" align="center">Actions</TableCell>
+                <TableCell padding="none" sx={{ pl: 1, width: '30%' }}>Description</TableCell>
+                <TableCell padding="none" sx={{ pl: 1, width: '20%' }}>Account</TableCell>
+                <TableCell padding="none" align="right" sx={{ pr: 2, width: '15%' }}>Amount</TableCell>
+                <TableCell padding="none" sx={{ pl: 1, width: '20%' }}>Partner</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -974,25 +973,29 @@ function TransactionsView({ accounts }) {
                   }}
                 >
                   <TableCell padding="none" sx={{ pl: 2 }}>{new Date(tx.date).toLocaleDateString()}</TableCell>
-                  <TableCell padding="none">{tx.description}</TableCell>
-                  <TableCell padding="none">{tx.account_name}</TableCell>
+                  <TableCell padding="none" sx={{ pl: 1 }}>{tx.description}</TableCell>
+                  <TableCell padding="none" sx={{ pl: 1 }}>{tx.account_name}</TableCell>
                   <TableCell padding="none" align="right" sx={{
+                    pr: 2,
                     color: tx.amount < 0 ? 'error.main' : 'success.main'
                   }}>
                     {formatCurrency(tx.amount)}
                   </TableCell>
-                  <TableCell padding="none">{tx.partner_name || 'Unassigned'}</TableCell>
-                  <TableCell padding="none" align="center">
-                    <Button
-                      size="small"
-                      onClick={() => {
-                        setSelectedTransaction(tx);
-                        setShowAssignPartnerDialog(true);
-                      }}
-                      sx={{ minWidth: 'auto', py: 0 }}
-                    >
-                      Assign
-                    </Button>
+                  <TableCell padding="none" sx={{ pl: 1 }}>
+                    {tx.partner_name ? (
+                      tx.partner_name
+                    ) : (
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          setSelectedTransaction(tx);
+                          setShowAssignPartnerDialog(true);
+                        }}
+                        sx={{ minWidth: 'auto', py: 0 }}
+                      >
+                        Assign
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

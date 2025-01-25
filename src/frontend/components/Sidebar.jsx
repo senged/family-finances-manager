@@ -80,21 +80,6 @@ function Sidebar({ accounts, onAccountsChange, isCollapsed }) {
     }
   };
 
-  const handleCleanup = async (keepAccounts = false) => {
-    if (window.confirm(`Are you sure you want to ${keepAccounts ? 'clear all transaction data' : 'remove all accounts and data'}?`)) {
-      try {
-        await window.electron.cleanupData({ keepAccounts });
-        await onAccountsChange();
-        if (!keepAccounts) {
-          setAccountsOpen(false);
-        }
-      } catch (error) {
-        console.error('Cleanup failed:', error);
-        alert('Failed to cleanup data');
-      }
-    }
-  };
-
   const formatDateRange = (range, account) => {
     if (!range) return 'No transactions';
     
@@ -252,16 +237,7 @@ function Sidebar({ accounts, onAccountsChange, isCollapsed }) {
           bgcolor: 'background.paper'
         }}>
           <Stack spacing={1}>
-            <Button
-              variant="outlined"
-              color="error"
-              size="small"
-              startIcon={<CleanupIcon />}
-              onClick={() => handleCleanup(false)}
-              fullWidth
-            >
-              Delete All Data
-            </Button>
+            {/* Removed Delete All Data button */}
           </Stack>
         </Box>
       )}
