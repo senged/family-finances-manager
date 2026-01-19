@@ -10,7 +10,7 @@ const transactionManager = new TransactionManager(dataManager);
 
 async function showInitialDialog(mainWindow) {
   const { dialog } = require('electron');
-  
+
   async function showMainDialog() {
     const dialogOptions = {
       type: 'question',
@@ -83,7 +83,7 @@ async function showInitialDialog(mainWindow) {
 
   while (true) {
     const response = await showMainDialog();
-    
+
     if (response === 0) { // Open Existing
       const result = await dialog.showOpenDialog(mainWindow, {
         properties: ['openFile'],
@@ -122,7 +122,7 @@ async function createWindow() {
 
   try {
     const result = await showInitialDialog(mainWindow);
-    
+
     if (result.type === 'new') {
       await dataManager.createNewManifest(result.path, result.name);
       await dataManager.initialize(result.path);
@@ -207,6 +207,15 @@ ipcMain.handle('get-transactions', async (event, filters) => {
   }
 });
 
+ipcMain.handle('get-summary', async (event, filters) => {
+  try {
+    return await transactionManager.getSummary(filters);
+  } catch (error) {
+    console.error('Error getting summary:', error);
+    throw error;
+  }
+});
+
 // Partner management handlers
 ipcMain.handle('listPartners', async () => {
   return dataManager.partnerManager.listPartners();
@@ -216,28 +225,16 @@ ipcMain.handle('getPartner', async (event, partnerId) => {
   return dataManager.partnerManager.getPartner(partnerId);
 });
 
-ipcMain.handle('getTransactionPartners', async (event, transactionId) => {
-  return dataManager.partnerManager.getTransactionPartners(transactionId);
+ipcMain.handle('assignPartnerToTransaction', async (event, transactionId, partnerId) => {
+  return dataManager.partnerManager.assignPartnerToTransaction(transactionId, partnerId);
 });
 
-ipcMain.handle('assignPartnerToTransaction', async (event, transactionId, partnerId, role) => {
-  return dataManager.partnerManager.assignPartnerToTransaction(transactionId, partnerId, role);
-});
-
-ipcMain.handle('removePartnerFromTransaction', async (event, transactionId, partnerId) => {
-  return dataManager.partnerManager.removePartnerFromTransaction(transactionId, partnerId);
-});
-
-ipcMain.handle('refreshPartnerSummary', async (event, partnerId) => {
-  return dataManager.partnerManager.refreshPartnerSummary(partnerId);
+ipcMain.handle('removePartnerFromTransaction', async (event, transactionId) => {
+  return dataManager.partnerManager.removePartnerFromTransaction(transactionId);
 });
 
 ipcMain.handle('refreshAllPartnerSummaries', async () => {
   return dataManager.partnerManager.refreshAllPartnerSummaries();
-});
-
-ipcMain.handle('bulkUpdatePartnerTransactions', async (event, partnerId, { addTransactionIds, removeTransactionIds }) => {
-  return dataManager.partnerManager.bulkUpdatePartnerTransactions(partnerId, { addTransactionIds, removeTransactionIds });
 });
 
 ipcMain.handle('createPartner', async (event, partnerData) => {
@@ -256,9 +253,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-    //if (process.platform !== 'darwin') {
-        app.quit();
-    //}
+  app.quit();
 });
 
 app.on('activate', () => {

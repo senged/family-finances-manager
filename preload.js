@@ -11,7 +11,7 @@ const processorsArray = Object.entries(TRANSACTION_PROCESSORS).map(([id, process
 
 contextBridge.exposeInMainWorld('electron', {
   invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
-  
+
   // Account and transaction methods
   getAccounts: () => ipcRenderer.invoke('get-accounts'),
   addAccount: (account) => ipcRenderer.invoke('add-account', account),
@@ -19,16 +19,18 @@ contextBridge.exposeInMainWorld('electron', {
   importTransactions: (data) => ipcRenderer.invoke('import-transactions', data),
   cleanupData: (options) => ipcRenderer.invoke('cleanup-data', options),
   getTransactions: (filters) => ipcRenderer.invoke('get-transactions', filters),
-  
+  getSummary: (filters) => ipcRenderer.invoke('get-summary', filters),
+
   // Partner management methods
   listPartners: () => ipcRenderer.invoke('listPartners'),
   getPartner: (partnerId) => ipcRenderer.invoke('getPartner', partnerId),
-  getTransactionPartners: (transactionId) => ipcRenderer.invoke('getTransactionPartners', transactionId),
   createPartner: (partnerData) => ipcRenderer.invoke('createPartner', partnerData),
-  
+  assignPartnerToTransaction: (txId, partnerId) => ipcRenderer.invoke('assignPartnerToTransaction', txId, partnerId),
+  removePartnerFromTransaction: (txId) => ipcRenderer.invoke('removePartnerFromTransaction', txId),
+
   // Use the prepared array
   processors: processorsArray,
-  
+
   // Expose account types
   accountTypes: ACCOUNT_TYPES
 });
