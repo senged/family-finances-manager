@@ -1,5 +1,10 @@
 {
   "name": "family-finances-manager",
+  "productName": "Family Finances",
+  "build": {
+    "appId": "com.family.finances",
+    "productName": "Family Finances"
+  },
   "version": "1.0.0",
   "description": "",
   "main": "main.cjs",

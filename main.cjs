@@ -1,4 +1,6 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+app.setName('Family Finances');
+process.title = 'Family Finances';
 const path = require('path');
 const DataManager = require('./src/backend/dataManager.cjs');
 const TransactionManager = require('./src/backend/transactionManager.cjs');
@@ -16,7 +18,7 @@ async function showInitialDialog(mainWindow) {
       type: 'question',
       buttons: ['Open Existing', 'Create New', 'Cancel'],
       defaultId: 0,
-      title: 'Family Finance Manager',
+      title: 'Family Finances',
       message: 'Would you like to open an existing file or create a new one?'
     };
 
@@ -252,6 +254,103 @@ ipcMain.handle('createPartner', async (event, partnerData) => {
 
 // Initialize data manager on app ready
 app.whenReady().then(async () => {
+  // Set application menu
+  const isMac = process.platform === 'darwin';
+  const template = [
+    ...(isMac ? [{
+      label: 'Family Finances',
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    }] : []),
+    {
+      label: 'File',
+      submenu: [
+        isMac ? { role: 'close' } : { role: 'quit' }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        ...(isMac ? [
+          { role: 'pasteAndMatchStyle' },
+          { role: 'delete' },
+          { role: 'selectAll' },
+          { type: 'separator' },
+          {
+            label: 'Speech',
+            submenu: [
+              { role: 'startSpeaking' },
+              { role: 'stopSpeaking' }
+            ]
+          }
+        ] : [
+          { role: 'delete' },
+          { type: 'separator' },
+          { role: 'selectAll' }
+        ])
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac ? [
+          { type: 'separator' },
+          { role: 'front' },
+          { type: 'separator' },
+          { role: 'window' }
+        ] : [
+          { role: 'close' }
+        ])
+      ]
+    },
+    {
+      role: 'help',
+      submenu: [
+        {
+          label: 'Learn More',
+          click: async () => {
+            const { shell } = require('electron');
+            await shell.openExternal('https://electronjs.org');
+          }
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+
   try {
     await createWindow();
   } catch (error) {

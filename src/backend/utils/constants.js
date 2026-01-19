@@ -72,11 +72,11 @@ function App() {
         >
           <Toolbar>
             <Typography variant="h6" noWrap component="div">
-              Family Finance Manager
+              Family Finances
             </Typography>
           </Toolbar>
         </AppBar>
-        
+
         {/* MODIFIED: Enhanced Sidebar with new props */}
         <Drawer
           sx={{
@@ -90,7 +90,7 @@ function App() {
           variant="permanent"
           anchor="left"
         >
-          <Sidebar 
+          <Sidebar
             selectedView={selectedView}
             setSelectedView={setSelectedView}
             accounts={accounts}

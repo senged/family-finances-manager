@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { 
-  Box, 
-  CssBaseline, 
-  Drawer, 
-  AppBar, 
-  Toolbar, 
-  Typography, 
-  Tabs, 
+import {
+  Box,
+  CssBaseline,
+  Drawer,
+  AppBar,
+  Toolbar,
+  Typography,
+  Tabs,
   Tab,
   IconButton
 } from '@mui/material';
@@ -85,9 +85,9 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ display: 'flex', height: '100vh' }}>
-        <AppBar 
-          position="fixed" 
-          sx={{ 
+        <AppBar
+          position="fixed"
+          sx={{
             zIndex: (theme) => theme.zIndex.drawer + 1,
             transition: theme.transitions.create(['width', 'margin'], {
               easing: theme.transitions.easing.sharp,
@@ -114,11 +114,11 @@ function App() {
               {sidebarOpen ? <ChevronLeftIcon /> : <MenuIcon />}
             </IconButton>
             <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-              Family Finance Manager
+              Family Finances
             </Typography>
           </Toolbar>
-          <Tabs 
-            value={currentTab} 
+          <Tabs
+            value={currentTab}
             onChange={handleTabChange}
             sx={{ backgroundColor: 'background.paper' }}
           >
@@ -156,8 +156,8 @@ function App() {
           <Sidebar accounts={accounts} onAccountsChange={loadAccounts} isCollapsed={!sidebarOpen} />
         </Drawer>
 
-        <Box component="main" sx={{ 
-          flexGrow: 1, 
+        <Box component="main" sx={{
+          flexGrow: 1,
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
@@ -165,21 +165,21 @@ function App() {
         }}>
           <Toolbar /> {/* Space for AppBar */}
           <Toolbar /> {/* Space for Tabs */}
-          
+
           <TabPanel value={currentTab} index={0}>
             <TransactionsView accounts={accounts} />
           </TabPanel>
-          
+
           <TabPanel value={currentTab} index={1}>
             <PartnersView />
           </TabPanel>
-          
+
           <TabPanel value={currentTab} index={2}>
             <Typography variant="h5" sx={{ p: 3, color: 'text.secondary', textAlign: 'center' }}>
               Analysis View (Coming Soon)
             </Typography>
           </TabPanel>
-          
+
           <TabPanel value={currentTab} index={3}>
             <Typography variant="h5" sx={{ p: 3, color: 'text.secondary', textAlign: 'center' }}>
               Reports View (Coming Soon)
