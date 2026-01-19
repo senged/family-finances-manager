@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('electron', {
   cleanupData: (options) => ipcRenderer.invoke('cleanup-data', options),
   getTransactions: (filters) => ipcRenderer.invoke('get-transactions', filters),
   getSummary: (filters) => ipcRenderer.invoke('get-summary', filters),
+  deduplicateTransactions: () => ipcRenderer.invoke('deduplicate-transactions'),
 
   // Partner management methods
   listPartners: () => ipcRenderer.invoke('listPartners'),

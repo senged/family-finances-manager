@@ -39,12 +39,13 @@ import {
   FilterList as FilterIcon,
   Assessment as AssessmentIcon,
   Person as PersonIcon,
-  Clear as ClearIcon
+  Clear as ClearIcon,
+  DeleteSweep as CleanupIcon
 } from '@mui/icons-material';
-import { 
-  differenceInDays, 
-  differenceInMonths, 
-  differenceInYears 
+import {
+  differenceInDays,
+  differenceInMonths,
+  differenceInYears
 } from 'date-fns';
 import AssignPartnerDialog from './partners/AssignPartnerDialog';
 // import { PartnerManagerDialog } from './partners/PartnerManagerDialog';
@@ -184,7 +185,7 @@ function TransactionsView({ accounts }) {
 
       // Then perform the backend operation
       await window.electron.invoke('assignPartnerToTransaction', transaction.global_id, partner.id);
-      
+
       // Refresh transactions to get updated data
       await loadTransactions();
     } catch (error) {
@@ -212,7 +213,7 @@ function TransactionsView({ accounts }) {
 
       // Then perform the backend operation
       await window.electron.invoke('removePartnerFromTransaction', transaction.global_id);
-      
+
       // Refresh transactions to get updated data
       await loadTransactions();
     } catch (error) {
@@ -230,11 +231,28 @@ function TransactionsView({ accounts }) {
         aliases: [transaction.description],
         categories: []
       });
-      
+
       await handleAssignPartner(transaction, newPartner);
       await loadPartners();
     } catch (error) {
       console.error('Error creating partner:', error);
+    }
+  };
+
+  const handleDeduplicate = async (event) => {
+    event.stopPropagation();
+    if (confirm('Find and remove duplicate transactions? This will combine entries that appear to be identical.')) {
+      try {
+        setLoading(true);
+        const result = await window.electron.deduplicateTransactions();
+        alert(`Deduplication complete! Removed ${result.removedCount} duplicate entries.`);
+        await loadTransactions();
+      } catch (error) {
+        console.error('Deduplication failed:', error);
+        alert('Deduplication failed. See console for details.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -340,13 +358,13 @@ function TransactionsView({ accounts }) {
 
   const getFilterSummary = () => {
     const parts = [];
-    
+
     if (datasetRange.earliest && datasetRange.latest) {
       parts.push(`Dataset spans ${format(datasetRange.earliest, 'MMM d, yyyy')} to ${format(datasetRange.latest, 'MMM d, yyyy')}`);
     }
 
     const filterParts = [];
-    
+
     if (filters.startDate || filters.endDate) {
       filterParts.push('Filtered to');
       if (filters.startDate && filters.endDate) {
@@ -536,7 +554,7 @@ function TransactionsView({ accounts }) {
             <Accordion defaultExpanded>
               <AccordionSummary
                 expandIcon={<ExpandMoreIcon />}
-                sx={{ 
+                sx={{
                   minHeight: 40,
                   '& .MuiAccordionSummary-content': {
                     my: 0
@@ -566,8 +584,8 @@ function TransactionsView({ accounts }) {
                             Date Range
                           </Typography>
                           <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                            {summary.firstDate && summary.lastDate ? 
-                              formatDateDuration(summary.firstDate, summary.lastDate) : 
+                            {summary.firstDate && summary.lastDate ?
+                              formatDateDuration(summary.firstDate, summary.lastDate) :
                               'No transactions'
                             }
                           </Typography>
@@ -582,9 +600,9 @@ function TransactionsView({ accounts }) {
                     </Typography>
                     <Grid container spacing={0.5}>
                       <Grid item xs={12} sm={4}>
-                        <Paper sx={{ 
-                          p: 0.5, 
-                          bgcolor: 'success.light', 
+                        <Paper sx={{
+                          p: 0.5,
+                          bgcolor: 'success.light',
                           color: 'success.contrastText',
                           display: 'flex',
                           justifyContent: 'space-between',
@@ -597,9 +615,9 @@ function TransactionsView({ accounts }) {
                         </Paper>
                       </Grid>
                       <Grid item xs={12} sm={4}>
-                        <Paper sx={{ 
-                          p: 0.5, 
-                          bgcolor: 'error.light', 
+                        <Paper sx={{
+                          p: 0.5,
+                          bgcolor: 'error.light',
                           color: 'error.contrastText',
                           display: 'flex',
                           justifyContent: 'space-between',
@@ -612,9 +630,9 @@ function TransactionsView({ accounts }) {
                         </Paper>
                       </Grid>
                       <Grid item xs={12} sm={4}>
-                        <Paper sx={{ 
-                          p: 0.5, 
-                          bgcolor: summary.net >= 0 ? 'success.light' : 'error.light', 
+                        <Paper sx={{
+                          p: 0.5,
+                          bgcolor: summary.net >= 0 ? 'success.light' : 'error.light',
                           color: 'white',
                           display: 'flex',
                           justifyContent: 'space-between',
@@ -695,9 +713,9 @@ function TransactionsView({ accounts }) {
 
                   {summary.transfers > 0 && (
                     <Grid item xs={12}>
-                      <Paper sx={{ 
-                        p: 0.5, 
-                        bgcolor: 'info.light', 
+                      <Paper sx={{
+                        p: 0.5,
+                        bgcolor: 'info.light',
                         color: 'info.contrastText',
                         display: 'flex',
                         justifyContent: 'space-between',
@@ -739,20 +757,20 @@ function TransactionsView({ accounts }) {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
-      <Box sx={{ 
-        height: '100%', 
-        display: 'flex', 
+      <Box sx={{
+        height: '100%',
+        display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden'
       }}>
-        <Paper sx={{ 
+        <Paper sx={{
           borderRadius: 0
         }}>
           {/* Filters Accordion */}
           <Accordion defaultExpanded>
             <AccordionSummary
               expandIcon={<ExpandMoreIcon />}
-              sx={{ 
+              sx={{
                 minHeight: 40,
                 bgcolor: 'background.default',
                 '& .MuiAccordionSummary-content': {
@@ -760,9 +778,20 @@ function TransactionsView({ accounts }) {
                 }
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <FilterIcon />
-                <Typography>Filters</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%', justifyContent: 'space-between' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <FilterIcon />
+                  <Typography>Filters</Typography>
+                </Box>
+                <Button
+                  size="small"
+                  startIcon={<CleanupIcon />}
+                  onClick={handleDeduplicate}
+                  color="warning"
+                  sx={{ mr: 2 }}
+                >
+                  Remove Duplicates
+                </Button>
               </Box>
             </AccordionSummary>
             <AccordionDetails sx={{ p: 0.5 }}>
@@ -773,8 +802,8 @@ function TransactionsView({ accounts }) {
                     label="Start Date"
                     value={filters.startDate}
                     onChange={(date) => handleFilterChange('startDate', date)}
-                    slotProps={{ 
-                      textField: { 
+                    slotProps={{
+                      textField: {
                         size: 'small',
                         sx: { width: '130px' }
                       }
@@ -784,8 +813,8 @@ function TransactionsView({ accounts }) {
                     label="End Date"
                     value={filters.endDate}
                     onChange={(date) => handleFilterChange('endDate', date)}
-                    slotProps={{ 
-                      textField: { 
+                    slotProps={{
+                      textField: {
                         size: 'small',
                         sx: { width: '130px' }
                       }
@@ -811,7 +840,7 @@ function TransactionsView({ accounts }) {
                     onOpen={() => setAccountSelectOpen(true)}
                     onClose={handleDropdownClose}
                     value={filters.accountIds}
-                    onChange={() => {}}  // Handle changes through the MenuItem clicks instead
+                    onChange={() => { }}  // Handle changes through the MenuItem clicks instead
                     renderValue={(selected) => {
                       if (selected.length === 0) {
                         return 'Select Accounts';
@@ -823,7 +852,7 @@ function TransactionsView({ accounts }) {
                     }}
                     MenuProps={{
                       PaperProps: {
-                        sx: { 
+                        sx: {
                           maxHeight: 400,
                           '& .MuiList-root': {
                             padding: 0
@@ -832,33 +861,33 @@ function TransactionsView({ accounts }) {
                       }
                     }}
                   >
-                    <Box sx={{ 
+                    <Box sx={{
                       display: 'flex',
                       flexDirection: 'column',
                       height: '100%',
                       minHeight: 200
                     }}>
                       {/* Account List */}
-                      <Box sx={{ 
-                        flexGrow: 1, 
+                      <Box sx={{
+                        flexGrow: 1,
                         overflow: 'auto',
                         minHeight: 100
                       }}>
                         {accounts.map((account) => (
-                          <MenuItem 
-                            key={account.id} 
+                          <MenuItem
+                            key={account.id}
                             value={account.id}
                             onClick={(event) => handleAccountSelection(event, account.id)}
                             dense
                             sx={{ py: 0 }}
                           >
-                            <Checkbox 
+                            <Checkbox
                               checked={pendingAccountIds.includes(account.id)}
                               onChange={(event) => handleAccountSelection(event, account.id)}
                               onClick={(event) => event.stopPropagation()}
                               size="small"
                             />
-                            <ListItemText 
+                            <ListItemText
                               primary={account.name}
                               primaryTypographyProps={{
                                 variant: 'body2'
@@ -869,11 +898,11 @@ function TransactionsView({ accounts }) {
                       </Box>
 
                       {/* Action Bar */}
-                      <Box sx={{ 
-                        borderTop: 1, 
+                      <Box sx={{
+                        borderTop: 1,
                         borderColor: 'divider',
                         p: 1,
-                        display: 'flex', 
+                        display: 'flex',
                         justifyContent: 'space-between',
                         backgroundColor: 'background.paper',
                         position: 'sticky',
@@ -881,15 +910,15 @@ function TransactionsView({ accounts }) {
                         zIndex: 1
                       }}>
                         <Box sx={{ display: 'flex', gap: 1 }}>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             onClick={handleSelectNoAccounts}
                             variant="outlined"
                           >
                             Clear
                           </Button>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             onClick={handleSelectAllAccounts}
                             variant="outlined"
                           >
@@ -897,16 +926,16 @@ function TransactionsView({ accounts }) {
                           </Button>
                         </Box>
                         <Box sx={{ display: 'flex', gap: 1 }}>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             onClick={handleCancelAccountSelection}
                             variant="outlined"
                           >
                             Cancel
                           </Button>
-                          <Button 
-                            size="small" 
-                            variant="contained" 
+                          <Button
+                            size="small"
+                            variant="contained"
                             onClick={handleApplyAccountSelection}
                             color="primary"
                           >
@@ -1014,33 +1043,35 @@ function TransactionsView({ accounts }) {
         </TableContainer>
       </Box>
 
-      {showAssignPartnerDialog && selectedTransaction && (
-        <AssignPartnerDialog
-          transaction={selectedTransaction}
-          onClose={() => {
-            setShowAssignPartnerDialog(false);
-            setSelectedTransaction(null);
-          }}
-          onAssign={(partner) => handleAssignPartner(selectedTransaction, partner)}
-          onCreateNew={async (transaction) => {
-            try {
-              const newPartner = await window.electron.createPartner({
-                type: transaction.amount < 0 ? 'MERCHANT' : 'INSTITUTION',
-                name: transaction.description,
-                aliases: [transaction.description],
-                categories: []
-              });
-              
-              await handleAssignPartner(transaction, newPartner);
+      {
+        showAssignPartnerDialog && selectedTransaction && (
+          <AssignPartnerDialog
+            transaction={selectedTransaction}
+            onClose={() => {
               setShowAssignPartnerDialog(false);
               setSelectedTransaction(null);
-            } catch (error) {
-              console.error('Error creating partner:', error);
-            }
-          }}
-        />
-      )}
-    </LocalizationProvider>
+            }}
+            onAssign={(partner) => handleAssignPartner(selectedTransaction, partner)}
+            onCreateNew={async (transaction) => {
+              try {
+                const newPartner = await window.electron.createPartner({
+                  type: transaction.amount < 0 ? 'MERCHANT' : 'INSTITUTION',
+                  name: transaction.description,
+                  aliases: [transaction.description],
+                  categories: []
+                });
+
+                await handleAssignPartner(transaction, newPartner);
+                setShowAssignPartnerDialog(false);
+                setSelectedTransaction(null);
+              } catch (error) {
+                console.error('Error creating partner:', error);
+              }
+            }}
+          />
+        )
+      }
+    </LocalizationProvider >
   );
 }
 

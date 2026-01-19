@@ -216,6 +216,15 @@ ipcMain.handle('get-summary', async (event, filters) => {
   }
 });
 
+ipcMain.handle('deduplicate-transactions', async () => {
+  try {
+    return await transactionManager.deduplicateTransactions();
+  } catch (error) {
+    console.error('Error deduplicating transactions:', error);
+    throw error;
+  }
+});
+
 // Partner management handlers
 ipcMain.handle('listPartners', async () => {
   return dataManager.partnerManager.listPartners();
