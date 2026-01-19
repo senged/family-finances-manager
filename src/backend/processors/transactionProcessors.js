@@ -188,6 +188,45 @@ const TRANSACTION_PROCESSORS = {
         });
       });
     }
+  },
+
+  'chase_credit_card': {
+    id: 'chase_credit_card',
+    name: 'Chase Credit Card',
+    description: 'Processor for Chase credit card transaction exports',
+    
+    async processFile(filePath) {
+      console.log(`Loading Chase file: ${filePath}`);
+      const content = await fs.readFile(filePath, 'utf8');
+      
+      return new Promise((resolve, reject) => {
+        csv.parse(content, {
+          columns: true,
+          skip_empty_lines: true,
+          trim: true
+        }, (err, records) => {
+          if (err) reject(err);
+          
+          const transactions = records.map(record => {
+            const amount = parseFloat(record.Amount || '0');
+            
+            return {
+              date: new Date(record['Transaction Date']),
+              postDate: new Date(record['Post Date']),
+              description: record.Description,
+              category: record.Category,
+              amount: amount,
+              type: amount >= 0 ? 'credit' : 'debit',
+              memo: record.Memo,
+              raw: record
+            };
+          });
+          
+          console.log(`Loaded ${transactions.length} transactions from Chase file: ${filePath}`);
+          resolve(transactions);
+        });
+      });
+    }
   }
 };
 
